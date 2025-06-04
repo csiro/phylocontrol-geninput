@@ -29,9 +29,10 @@ data, molecular data, spatial data, and plant traits in an intuitive
 interactive interface, empowering biocontrol practitioners to summarise,
 visualise, and analyse data efficiently.
 
-This repository, `phylocontrol.geninput`, contains the four Quarto
-notebooks to generate inputs for the R Shiny visualisation application
-available from the [`phylocontrol.viz`
+This repository,
+[`phylocontrol.geninput`](https://github.com/csiro/phylocontrol-geninput/),
+contains the four Quarto notebooks to generate inputs for the R Shiny
+visualisation application available from the [`phylocontrol.viz`
 repository](https://github.com/csiro/phylocontrol.viz).
 
 <p align="center">
@@ -50,18 +51,18 @@ sources.
 
 ## Key outputs from each notebook
 
-`1_Species_list.qmd`
+**`1_Species_list.qmd`**
 
 A csv file containing a list of scientific names of the target weed and
 related species e.g. `Erigeron_species_list.csv`
 
-`2_Occurrences.qmd`
+**`2_Occurrences.qmd`**
 
 A csv file of point occurrence data containing the key columns
 ‘species’, ‘decimalLatitude’, ‘decimalLongitude’, and ‘country’
 e.g. `Erigeron_occurrences.csv`
 
-`3_Species_distribution_modelling.qmd`
+**`3_Species_distribution_modelling.qmd`**
 
 A `sdm/` folder containing folders `maxent_results/` and/or
 `climatch_results/`. There is another directory indicating the climate
@@ -70,7 +71,7 @@ species run. Key outputs for visualisation are the grid files
 e.g. `maxent_predict.grd` and `climatch_predict.grd` and in the case of
 MaxEnt, the `maxent_thresholds.csv` file.
 
-`4_Sequences_and_phylogenomics.qmd`
+**`4_Sequences_and_phylogenomics.qmd`**
 
 A phylogenetic tree in Newick format e.g. `Erigeron.tre`
 
