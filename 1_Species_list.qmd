@@ -1,0 +1,89 @@
+---
+title: "1_Species_list"
+format: html
+editor: visual
+author: Stephanie Chen
+---
+
+# About this script
+
+This code helps you obtain a list of species for use with PhyloControl. The information that needs to be provided by the user includes the genus and family that the target weed belongs to and the location of planned biocontrol.
+
+# Running code
+
+## Load libraries
+
+We will load the R packages used in this notebook. Some libraries are not available on CRAN so the installation code has been provided (and commented out) in this chunk.
+
+```{r setup}
+#if(!require(devtools)) install.packages(devtools)
+#library(devtools)
+#devtools::install_github("barnabywalker/kewr")
+library(kewr)
+
+library(data.table)
+library(dplyr)
+```
+
+## **Specify the target weed species and region for your biocontrol project**
+
+Next, some more set up. Change the text in the quotes according to your biocontrol project. The study group should be the genus of the target weed and will be the name the output folder. You can add multiple study locations in a vector. If you are intending for the location to be the United States, the full name of individual states (e.g. Florida) need to be entered as study locations. You can check the Distribution tab on Plants of the World Online to see how the location data is recorded. We also create a folder with the same name as the nominated `study_group` in your working directory.
+
+```{r setup}
+# Target weed is Erigeron bonariensis
+study_group <- "Erigeron"
+study_group_family <- "Asteraceae"
+study_locations <- c("Australia")
+
+# Create the folder with the study_group name if it does not already exist
+dir_name <- file.path(getwd(), study_group)
+if (!dir.exists(dir_name)) {
+  dir.create(dir_name)
+  message("Folder created: ", dir_name)
+} else {
+  message("Folder already exists: ", dir_name)
+}
+```
+
+## **Retrieve names and export species list**
+
+The `kewr` package is used to search for accepted species in the target biocontrol region using the source Plants of the World Online where the taxonomic backbone is the World Checklist of Vascular Plants. If you have specified multiple locations, these can be queried separately, or set up a loop, then combined into a data frame.
+
+Don't forget to include an appropriate outgroup in your species list so that the tree can be rooted. These can be appended manually to the output csv file, if an outgroup is not already included. The output file will be saved to the folder named the study group.
+
+```{r}
+# Create or clear the csv file before appending
+output_file <- paste0(study_group, "/", study_group, "_species_list.csv")
+if (file.exists(output_file)) {
+  file.remove(output_file)
+}
+species_data_list <- list()
+
+for (location in study_locations) {
+  species_query <- search_powo(list(family = study_group_family, distribution = location), 
+                               filters = c("accepted", "species"), limit = 9999)
+  species_list_clean <- lapply(species_query$results, function(x) {
+    location_clean <- sub(".*<em>([^<]+)</em>.*", "\\1", x$snippet)
+    data.frame(
+      Species = x$name,
+      Authority = x$author,
+      Family = x$family,
+      Location = location_clean
+    )
+  })
+  
+  species_data <- do.call(rbind, species_list_clean)
+  species_data_list[[location]] <- species_data
+}
+
+# Combine all species data into one data frame
+all_species_data <- do.call(rbind, species_data_list)
+
+# Aggregate locations for each species
+all_species_data_agg <- all_species_data |>
+  group_by(Species, Authority, Family) |>
+  summarise(Location = paste(unique(Location), collapse = ", "), .groups = 'drop')
+
+# Write the aggregated data to the csv file
+fwrite(all_species_data_agg, file = output_file, row.names = FALSE)
+```

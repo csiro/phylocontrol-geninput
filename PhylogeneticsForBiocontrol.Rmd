@@ -1,0 +1,615 @@
+---
+title: "PhylogeneticsForBiocontrol"
+author: "Nunzio Knerr"
+date: "17/09/2021"
+output: html_document
+---
+
+## Phylogenetics For Biocontrol
+
+This R markdown provides a proof-of-concept semi-automated pipeline for biological weed control researchers to summarise degrees of relatedness between a target species and its relatives. This information is one of several considerations in the design of host specificity test lists.
+
+The user defines target species by Linnean plant name, wider taxonomic group (e.g. one or several genera of plants), and gene regions (defaults are its, ets, and rbcl). The pipeline then automatically downloads DNA sequence data from Genbank, selects the longest sequence of each gene for each species, aligns the sequences, concatenates them into a supermatrix, and infers a phylogenetic tree. At that point the user intervenes once to root the phylogeny, based on known relationships as documented in the literature, and the pipeline will write out a table of degrees of relatedness and a PDF of the phylogenetic tree. In future versions of the pipeline we intend to further automate steps currently done by the user and to add functionality.
+
+```{r include=FALSE}
+knitr::opts_chunk$set(echo =TRUE)
+
+```
+
+## Install Required Packages
+
+```{r installPackages, eval=FALSE, include=TRUE}
+
+packages <- c("rentrez", "stringr", "dplyr", "insect", "tools", "ips", "apex", "phytools", "adephylo", "MASS", "plotly")
+
+packagesToInstall <- setdiff(packages, rownames(installed.packages()))
+
+if(length(packagesToInstall)==0){
+  print("All packages already installed")
+} else{
+  install.packages(packagesToInstall)
+}
+
+```
+
+## Set Parameters for use in the script below
+
+The code is for setting up the parameters which the rest of the script uses. Define your target species and wider taxonomic group in the same format as used in the defaults below, using Linnean names.
+
+Note that the ribosomal spacer regions ITS and ETS will be queried as miscellaneous RNA, but all other user-provided sequence region names are currently interpreted as gene names. In addition to the defaults "rbcl", "its", and "ets", a region with large amounts of existing data is "trnl" (trnL).
+
+```{r userParamerters, eval=FALSE, echo=TRUE}
+taxanomicGroups <- c("Conyza", "Erigeron")
+targetSpecies <- "Conyza bonariensis"
+sequenceRegions <- c("rbcl", "its", "ets")
+excludeSequences <- c("")
+limitSequencesReturnedTo <- 1000
+######################################################################
+#Setup a folder to save the results in "Target_species_results"
+######################################################################
+resultsFolder <- paste0(stringr::str_replace_all(targetSpecies, " ", "_"), "_results")
+dir.create(resultsFolder)
+myResultsFolder <- resultsFolder
+#setwd(resultsFolder)
+
+```
+
+## Define "generateFileNameToProcess" function to make filename/s used later
+
+```{r eval=FALSE, echo=TRUE}
+generateFileNameToProcess <- function(taxanomicGroups, targetSpecies){
+  resultsFileName <- stringr::str_replace_all(taxanomicGroups[1], " ", "_")
+  organismTerm <- paste0("(","\"", taxanomicGroups[1] , "\"", "[Organism])")
+  #print(paste0("taxa: ",unlist(taxanomicGroups), targetSpecies))
+  for(i in 1:length(taxanomicGroups)){
+    if(i > 1){
+      organismTerm <- paste0("(", organismTerm, " OR \"", taxanomicGroups[i], "\"[Organism])")
+      resultsFileName <- paste0(resultsFileName, "_OR_", stringr::str_replace_all(taxanomicGroups[i], " ", "_"))
+    }
+  }
+  organismTerm <- paste0("(", organismTerm, " OR \"", targetSpecies, "\"[Organism])")
+  resultsFileNameToPass <- paste0(resultsFileName, "_OR_", stringr::str_replace_all(targetSpecies, " ", "_"), "_Region")
+  print(paste0("File name generated: " ,resultsFileNameToPass))
+  return(resultsFileNameToPass)
+}
+
+```
+
+## Call "generateFileNameToProcess" function above
+
+Results will be saved in a folder named after the target species, and individual files will be named after the combination of target species and wider taxonomic group.
+
+```{r eval=FALSE, echo=TRUE}
+myNameToProcess <- generateFileNameToProcess(taxanomicGroups, targetSpecies)
+```
+
+## Define "searchGenbank" function to download sequences
+
+The code below sets up the function to query Genbank and download data based on the user-defined parameters set earlier.
+
+```{r searchGenbank, echo=TRUE}
+searchGenbank <- function(taxanomicGroups, targetSpecies, sequenceRegionToSearch, resultsFolder, limitSequencesReturned){
+  #first create the string for the genbank search
+  resultsFileName <- stringr::str_replace_all(taxanomicGroups[1], " ", "_")
+  organismTerm <- paste0("(","\"", taxanomicGroups[1] , "\"", "[Organism])")
+  #print(paste0("taxa: ",unlist(taxanomicGroups), targetSpecies))
+  for(i in 1:length(taxanomicGroups)){
+    if(i > 1){
+      organismTerm <- paste0("(", organismTerm, " OR \"", taxanomicGroups[i], "\"[Organism])")
+      resultsFileName <- paste0(resultsFileName, "_OR_", stringr::str_replace_all(taxanomicGroups[i], " ", "_"))
+    }
+  }
+  organismTerm <- paste0("(", organismTerm, " OR \"", targetSpecies, "\"[Organism])")
+  resultsFileNameToPass <- paste0(resultsFileName, "_OR_", stringr::str_replace_all(targetSpecies, " ", "_"), "_Region_*.fasta")
+  resultsFileName <- paste0(resultsFileName, "_OR_", stringr::str_replace_all(targetSpecies, " ", "_"), "_Region_", sequenceRegionToSearch)
+   if(sequenceRegionToSearch == "ets"){ 
+    searchTerm <- paste0("(", organismTerm, " AND misc_RNA[Feature key] AND \"external transcribed spacer\"[All Fields]) NOT \"complete genome\"[All Fields]")
+    print(paste0("Search string: ", searchTerm)) 
+  } else if(sequenceRegionToSearch == "its"){
+    searchTerm <- paste0("(", organismTerm, " AND misc_RNA[Feature key] AND \"internal transcribed spacer\"[All Fields]) NOT \"complete genome\"[All Fields]")
+    print(paste0("Search string: ", searchTerm))
+  } else { 
+    searchTerm <- paste0("(", organismTerm, " AND ", sequenceRegionToSearch, "[Gene Name]) NOT \"complete genome\"[All Fields]")
+    print(paste0("Search string: ", searchTerm))
+  }
+
+
+  myquery <- rentrez::entrez_search('nucleotide',term=searchTerm, retmax=limitSequencesReturned, use_history=TRUE)
+  
+  myresults <- rentrez::entrez_fetch('nucleotide', rettype='fasta', web_history = myquery$web_history)
+  myresults <- stringr::str_trim(myresults, side = "both")
+  myresults <- paste0(myresults, "\n")
+  print(paste0("Returned: ", stringr::str_count(myresults, ">"), " sequences" ))
+  print("---------------------------------------------------")
+  print("")
+  write(myresults, file=paste0(resultsFolder, "/", resultsFileName, ".fasta"))
+  #return(list(myresults, stringr::str_count(myresults, ">")))
+}  
+
+```
+
+## Call "searchGenbank" function above
+
+Query Genbank for the user-defined taxonomic groups and gene regions.
+
+```{r callSearchGenbankFunction, echo=TRUE}
+##############################################################
+#loop through sequence regions and download sequence data
+for(s in 1:length(sequenceRegions)){
+  print(paste0("Searching Genbank for: ",sequenceRegions[s]))
+  #assign(paste0("genBankResult_", s), my_list[[i]])
+  assign(paste0("genBankResult_", s), searchGenbank(taxanomicGroups, targetSpecies, sequenceRegions[s], myResultsFolder, limitSequencesReturnedTo))
+ 
+  #genbankResult <- searchGenbank(taxanomicGroups, targetSpecies, sequenceRegions[s])
+}
+
+```
+
+## Define "processFastaFilesForConcatenation" function
+
+Function definition to loads DNA sequence files, generate summaries, and select one sequence of each gene region for each species. Currently, the longest sequence is selected to maximise the amount of data, regardless of its quality.
+
+```{r processFastaFilesForConcatenation, echo=TRUE}
+
+processFastaFilesForConcatenation <- function(resultsFolder, nameToProcess){
+  file_ls <- list.files(path = paste0("./",resultsFolder,"/"), pattern=paste0("^",nameToProcess, "*"), include.dirs = FALSE) 
+  summaryTable_df <- data.frame(fastaFile=character(),numberOfTaxa=numeric(),targetSpeciesPresent=character(), stringsAsFactors = FALSE)
+  w <- 0
+  #for each fasta file generate summarry csv
+  for(p in 1:length(file_ls)){#length(file_ls)
+    print(paste0("Generating Summary for: ", file_ls[p]))
+    tempDNAbin <- ape::read.FASTA(paste0("./",resultsFolder, "/",file_ls[p]))
+    seqNames <- names(tempDNAbin)
+    
+
+    seqNames_df <- data.frame(genBankID=character(),taxonName=character(),otherGenbankInfo=character(),sequenceLength=numeric(), stringsAsFactors = FALSE)
+    
+    for(i in 1:length(seqNames)){
+      tempName <- unlist(stringr::str_split(seqNames[i], " ",n=4))
+      seqNames_df[i,"genBankID"] <-  tempName[1]
+      seqNames_df[i,"taxonName"] <-  paste(tempName[2],tempName[3],sep=" ")
+      seqNames_df[i,"otherGenbankInfo"] <-  tempName[4]
+      seqNames_df[i,"sequenceLength"] <- unlist(lengths(tempDNAbin[i]))#get the sequence length
+    }
+    fileNameToUse <- paste0("./",resultsFolder, "/","AllSeqSummary_", tools::file_path_sans_ext(file_ls[p]), ".csv")
+    print(fileNameToUse)
+    write.table(seqNames_df, file=fileNameToUse, append = FALSE, quote = TRUE, sep = ",",row.names = FALSE, col.names = TRUE)
+ 
+'%>%' <- magrittr::'%>%'
+    
+  #now calculate longest unique sequence for each taxa
+  finalSequences <- seqNames_df %>%
+    dplyr::filter(stringr::str_detect(taxonName, "UNVERIFIED:|sp.", negate=TRUE)) %>%
+    dplyr::group_by(taxonName) %>% # for each unique sample
+    dplyr::arrange(-sequenceLength) %>% # order by total_reads DESC
+    dplyr::slice(1) # select the first row, i.e. with highest total_reads
+  fileNameToUse2 <- paste0("./",resultsFolder, "/","UniqueTaxaLongestSeqSummary_", tools::file_path_sans_ext(file_ls[p]), ".csv")
+  write.table(finalSequences, file=fileNameToUse2, append = FALSE, quote = TRUE, sep = ",",row.names = FALSE, col.names = TRUE)
+  print(fileNameToUse2)
+
+  w <- w + 1
+  summaryTable_df[w, "fastaFile"] <-  paste0("UniqueTaxaLongest_", tools::file_path_sans_ext(file_ls[p]), ".fasta")
+  summaryTable_df[w, "numberOfTaxa"] <- nrow(finalSequences)
+  summaryTable_df[w, "targetSpeciesPresent"] <-  any(finalSequences$taxonName==targetSpecies)
+  print(paste0("Unique Taxa Sequences: ", nrow(finalSequences)))
+  #create DNAbin of only unique files
+  for(i in 1:nrow(finalSequences)){
+    #print(paste0("Sequence: ", finalSequences[i,"genBankID"], " ", i, " of ", nrow(finalSequences)))
+    for(c in 1:length(names(tempDNAbin))){
+      seqToMatch <- paste(finalSequences[i,"genBankID"],finalSequences[i,"taxonName"],finalSequences[i,"otherGenbankInfo"], sep = " ")
+      if(!exists("finalDNAbin")){
+        #print("No Final DNAbin")
+        if(names(tempDNAbin[c]) == seqToMatch){
+          #print("found a match:")
+          finalDNAbin <- tempDNAbin[c]
+          cnt <- 1
+          names(finalDNAbin)[cnt] <- stringr::str_replace(finalSequences[i,"taxonName"], " ", "_")
+        } 
+      } else {
+        if(names(tempDNAbin[c]) == seqToMatch){
+          #print("found a match:")
+          finalDNAbin <- insect::join(finalDNAbin, tempDNAbin[c])
+          cnt <- cnt + 1
+          names(finalDNAbin)[cnt] <- stringr::str_replace(finalSequences[i,"taxonName"], " ", "_")
+        } 
+      }
+    } 
+  }
+  fileNameToUse3 <- paste0("./",resultsFolder, "/","UniqueTaxaLongest_", tools::file_path_sans_ext(file_ls[p]), ".fasta")
+  ape::write.dna(finalDNAbin, file = fileNameToUse3, format = 'fasta', append = FALSE)
+  rm(finalDNAbin)
+  }
+  write.csv(summaryTable_df, paste0("./",resultsFolder, "/","SummaryTable.csv"), row.names=FALSE)
+  summaryTable_df
+
+}
+```
+
+## Call "processFastaFilesForConcatenation" function above
+
+Calls the function selecting one sequence per species and gene region. This takes some time.
+
+```{r echo=TRUE}
+processFastaFilesForConcatenation(resultsFolder = myResultsFolder, nameToProcess = myNameToProcess)
+```
+
+## Name Lookup Using APC
+
+This section downloads the APC name lists for the wider taxonomic group and then generates tables summarising synonymy. It can be skipped, because the information is not currently used, but a future version of the pipeline will automate the harmonisation of taxonomic names, so that the dataset will not contain the same species twice, under different names.
+
+<https://biodiversity.org.au/nsl/services/export/index> <https://biodiversity.org.au/nsl/docs/main.html>
+
+```{r echo=TRUE}
+#library(dplyr)
+'%>%' <- magrittr::'%>%'
+
+taxanomicGroups <- c("Conyza", "Erigeron")
+taxanomicGroupsCollapsed <- paste(taxanomicGroups, collapse = "|")
+
+#download the APC file for all accepted names
+url <- "https://biodiversity.org.au/nsl/services/export/taxonCsv"
+APCfile <- "./APCtaxonCsv.csv"
+if(!file.exists(APCfile)){
+download.file(url, APCfile)
+} 
+
+APC_df <- read.csv(file = APCfile)
+names(APC_df)
+
+taxonGroupAPC <- APC_df %>%
+  dplyr::filter(grepl(taxanomicGroupsCollapsed,scientificName))
+
+APCFileName <- paste0("APC_", myNameToProcess,".csv")
+
+write.csv(taxonGroupAPC, file=paste0("./",resultsFolder, "/",APCFileName),row.names = FALSE) 
+
+#download the APNI file for all names
+#url <- "https://biodiversity.org.au/nsl/services/export/namesCsv"
+#APNIfile <- "./APNInamesCsv.csv"
+#if(!file.exists(APNIfile)){
+#  download.file(url, APNIfile)
+#}
+
+#APNI_df <- read.csv(file = APNIfile)
+#names(APNI_df)
+
+#taxonGroupAPNI <- APNI_df %>%
+#  dplyr::filter(grepl(taxanomicGroupsCollapsed,scientificName))
+
+#APNIFileName <- paste0("APNI_", myNameToProcess,".csv")
+
+#write.csv(taxonGroupAPNI, file=paste0("./",resultsFolder, "/",APNIFileName),row.names = FALSE) 
+
+#View(taxonGroupAPNI)  
+```
+
+## Load FASTA files and align using mafft
+
+The code below aligns the selected DNA sequences using mafft.
+
+Windows version: <https://mafft.cbrc.jp/alignment/software/windows_without_cygwin.html> needs to be downloaded and extracted into project folder, depending on where the user has placed it, e.g. c:\\phylogeneticsForBiocontrol\\mafft-win\\
+
+Linux version: <https://mafft.cbrc.jp/alignment/software/linux.html> needs to be installed locally, e.g. with sudo apt install mafft
+
+Mac version: <https://mafft.cbrc.jp/alignment/software/macosx.html>\
+needs to be downloaded and extracted into project folder, depending on where the user has placed it, e.g. \~/phylogeneticsForBiocontrol/mafft-mac/
+
+```{r echo=TRUE}
+filesToAlign <- list.files(path=paste0("./",resultsFolder,"/"), pattern=paste0("^","UniqueTaxaLongest_",myNameToProcess, "*"), full.names = FALSE) 
+
+checkOS <- Sys.info()["sysname"]
+if (checkOS == "Linux"){
+  mafftExecPath <- "mafft"
+} else if (checkOS == "Darwin"){
+  mafftExecPath <- "./mafft-mac/mafft.bat"
+} else {
+  mafftExecPath <- "./mafft-win/mafft.bat"
+}
+
+#library(ips)
+for(u in 1:length(filesToAlign)){
+  print(paste0("Aligning: ", filesToAlign[u]))
+  tempDNAbin <- insect::readFASTA(file=paste0("./", resultsFolder, "/",filesToAlign[u]),bin=TRUE) 
+  mafftFileName <- paste0("./",resultsFolder, "/","mafftAlgn",filesToAlign[u])
+  ips::mafft(tempDNAbin, add="add", method = "auto", options = c('--adjustdirection'), maxiterate = 0, op = 1.53, ep = 0, thread = -1, exec=mafftExecPath, quiet=FALSE, file=mafftFileName)                         
+}
+```
+
+## Check for Reversed Sequences in Alignment & Rename in FASTA
+
+The alignment software mafft may reverse-complement sequence data that has been published in the 'wrong' read direction, but then adds "\_R\_" to the beginning of the sequence name. The following code removes that addition, so that the sequences can be concatenated.
+
+```{r echo=TRUE}
+filesToConcat <- list.files(path=paste0("./",resultsFolder,"/"), pattern=paste0("^","mafftAlgnUniqueTaxaLongest_",myNameToProcess, "*"), full.names = TRUE) 
+
+for(p in 1:length(filesToConcat)){#length(file_ls)
+  print(paste0("Looking for reversed Sequences in: ", filesToConcat[p]))
+  tempDNAbin <- ape::read.FASTA(paste0(filesToConcat[p]))
+  seqNames <- names(tempDNAbin)
+  #View(seqNames)
+  for(i in 1:length(seqNames)){
+    print(names(tempDNAbin[i]))
+    names(tempDNAbin)[i] <- stringr::str_replace(names(tempDNAbin)[i], "_R_", "")
+  }
+  ape::write.FASTA(tempDNAbin, filesToConcat[p], header = NULL, append = FALSE)
+}    
+
+```
+
+## Concatenate gene regions and infer phylogenetic tree
+
+This section concatenates the different gene alignments into a single supermatrix and then infers a phylogenetic tree. If ribosomal and chloroplast data are known to show very different topologies in the study group, the user may want to restrict the dataset to one ("its", "ets") or the other (e.g., "trnl", "rbcl").
+
+Phylogenetic analysis is conducted using likelihood analysis as implemented in the R package [Phangorn](https://cran.r-project.org/web/packages/phangorn/phangorn.pdf). Currently the analysis does not infer clade support values.
+
+```{r echo=TRUE}
+
+filesToConcat <- list.files(path=paste0("./",resultsFolder,"/"), pattern=paste0("^","mafftAlgnUniqueTaxaLongest_",myNameToProcess, "*"), full.names = TRUE) 
+
+#library(apex)
+allData <- apex::read.multiFASTA(filesToConcat, add.gaps=TRUE)
+#alternative from existing DNAbins
+#alldata <- new("multidna",list(onednabin,anotherdnabin))
+
+concatData <- apex::concatenate(allData)# concatenate data
+starttree <- phangorn::random.addition(phangorn::as.phyDat(concatData))# create random starting tree 
+
+# because that needs branch lengths, we will illogically give it parsimony ones
+startpoint <- phangorn::pml(phangorn::acctran(starttree, phangorn::as.phyDat(concatData)), phangorn::as.phyDat(concatData), k=4)
+endpoint <- phangorn::optim.pml(startpoint, optNni = TRUE, optBf = TRUE, optQ = TRUE, optGamma = TRUE)
+
+# plot tree, if so desired
+ape::plot.phylo(endpoint$tree, use.edge.length = TRUE, cex=0.3, show.tip.label = TRUE)
+
+```
+
+## Interactive Tree Using ggtree
+
+This section displays the phylogenetic tree and allows the user to view node numbers and terminal names by hovering the mouse pointer over the tree. This is one way of finding out the number of the node to root the tree on.
+
+```{r echo=TRUE}
+###########################################
+# This code needs to be uncommented and run to install ggtree if needed
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#     install.packages("BiocManager")
+# 
+# BiocManager::install("ggtree")
+###########################################
+
+#library(ape)
+#library(ggtree)
+#library(plotly) #library for interactive plots
+
+# PLOT THE TREE -----------------------------------------------------------
+p1 <- ggtree::ggtree(endpoint$tree)
+plotly::ggplotly(p1)
+
+# metat <- p1$data %>%
+#   dplyr::inner_join(dat, c('label' = 'id'))
+
+p2 <- p1 +
+  ggplot2::geom_point(data = p1$data, ggplot2::aes(x = x, y = y, label = label))
+
+plotly::ggplotly(p2)
+#plotly::ggplotly(p1, tooltip = "label")
+
+```
+
+## Reroot the phylogeny and export PDF
+
+This is the only point where the user needs to intervene again, by rerooting the tree. The phylogenetic analysis has inferred the most likely tree, but it is unrooted, or rather randomly rooted. Phylogeneticists frequently use known outgroups to root their phylogenies. A phylogeny of the great apes would, for example, be rooted on a monkey outside of the great apes; a phylogeny of flowering plants would be rooted on gymnosperms, i.e. seed plants outside of the flowering plants.
+
+In this script, there are two ways of defining the node to be rooted. The user can supply two species to define their common ancestor ("taxaToFindRecentCommonAncestorsFrom"). Alternatively, they can supply a node number obtained from the previous tree visualisation directly, by changing the next line e.g. to read "myOG \<- 197" for node number 197, if that is the node they decided on.
+
+After rerooting, a PDF version of the phylogeny will be exported, with the target species marked in red.
+
+```{r echo=TRUE}
+# read phylogenetic tree
+# endpoint$tree
+mytree <- endpoint$tree
+
+#####################################################################
+# Need to use above code to identify the root,
+# if necessary, using two terminals to define clade
+#
+# one can, of course, define outgroups before phylogenetic analysis
+# TODO: this needs to be cleaned up and the rooting of the tree needs
+# to be sorted manually by the user.
+######################################################################
+# set the node to root from using the visualisation above
+# to select a node for rooting the tree
+#--------------
+#myOutGroup <- "Erigeron_leibergii"
+#mytree <- ape::root(mytree, outgroup=myOutGroup)
+
+#OR------------
+#getmrca: Find most recent common ancestors
+taxaToFindRecentCommonAncestorsFrom <- c("Erigeron_eruptens", "Erigeron_podophyllus")
+myOG <- ape::getMRCA(mytree, taxaToFindRecentCommonAncestorsFrom)
+mytree <- ape::root(mytree, node = myOG)
+#--------------
+
+# make all tips black except the target species, make that one red
+mytipcolours <- rep("black",length(mytree$tip.label)) 
+mytipcolours[which(mytree$tip.label == stringr::str_replace(targetSpecies,' ','_'))] <- 'red'
+
+# write tree to PDF, ladderised left; dynamically adjust height of plot to fit size of tree
+ pdf(paste0("./",resultsFolder,"/","tree_",myNameToProcess,".pdf"),width=8,height=((12/144)*length(mytree$tip.label)))
+   ape::plot.phylo(ape::ladderize(mytree,right = FALSE),use.edge.length = TRUE,cex=0.4,tip.color = mytipcolours)
+ dev.off()
+
+# write tree to Newick format for other analyses or supplementary data, if required
+ape::write.tree(mytree,file=paste0("./",resultsFolder,"/","tree_",myNameToProcess,".tre"))
+```
+
+## Define "descendantlist" Function to Collect Descendants of Node
+
+This function is used during the summary of degrees of relatedness.
+
+```{r collectDescendants, echo=TRUE}
+#################################################################################
+# function to recursively collect descendants of node; is used by degreesofsep function
+#################################################################################
+descendantlist <- function(thistree, thisnode)
+{
+  if (thisnode <= length(thistree$tip.label))
+  {
+    return (thisnode)
+  }
+  else
+  {
+    wherenext <- which(thistree$edge[,1]==thisnode)  # get immediate descendants
+    thislist <- NULL
+    for (x in 1:length(wherenext))
+    {
+      thislist <- c(thislist, descendantlist(thistree, thistree$edge[wherenext[x],2]))
+    }
+    return(thislist)
+  }
+}
+
+
+```
+
+## Define "degreeofsep" Function to Calculate Degree of Separation
+
+This function calculates Degrees of Separation as a measure of relatedness. This measure is a node-count relative to a target species, where its immediate sister lineage has a DoS of zero, their next common sister lineage has a DoS of one, and so on further down the phylogenetic tree. Because it does not take branch lengths into account, it only provides a rank order of relatedness, i.e. only an extremely vague approximation of divergence time in evolutionary history or divergence in traits.
+
+```{r degreeOfSep, echo=TRUE}
+######################################################################################
+# function to calculate degrees of phylogenetic separation between tree tips
+# seems to work, but results are, of course and in contrast to phylogenetic distances, asymmetric
+# read resulting matrix line-wise: line shows degrees of separation of taxa in columns, from
+# perspective of the taxon in the line
+####################################################################################
+
+degreesofsep <- function(thistree)
+{
+  dosmatrix <- matrix(0, nrow=length(thistree$tip.label), ncol=length(thistree$tip.label))
+  colnames(dosmatrix) <- thistree$tip.label
+  rownames(dosmatrix) <- thistree$tip.label
+  for (x in 1:length(thistree$tip.label))
+  {
+    prior_y <- x         # start at present terminal
+    y <- thistree$edge[which(thistree$edge[,2]==x),1]   # get immediately ancestral node
+    currentdist <- 0
+    while (y != (length(thistree$tip.label)+1)) # move downtree until root node is found
+    {
+      currentdesc <- which(thistree$edge[,1]==y)
+      for (z in 1:length(currentdesc))
+      {
+        if (thistree$edge[currentdesc[z],2]!=prior_y)
+        {
+          dosmatrix[x,descendantlist(thistree,thistree$edge[currentdesc[z],2])] <- currentdist
+        }
+      }
+      prior_y <- y
+      y <- thistree$edge[which(thistree$edge[,2]==y),1]   # get immediately ancestral node
+      currentdist <- currentdist + 1
+    }
+    currentdesc <- which(thistree$edge[,1]==y)
+    for (z in 1:length(currentdesc))
+    {
+      if (thistree$edge[currentdesc[z],2]!=prior_y)
+      {
+        dosmatrix[x,descendantlist(thistree,thistree$edge[currentdesc[z],2])] <- currentdist
+      }
+    }
+  }
+  return(dosmatrix)
+}
+```
+
+## Calculate Distances and Write Tables
+
+This currently final section computes the Degrees of Separation and patristic distances between the target species and all other species in the phylogenetic tree and exports them as a table. For Degrees of Separation, see previous section. Patristic distances are the sum of branch lengths separating two species on a phylogenetic tree. In this case, because the phylogeny is a likelihood phylogram, the distances are an estimate of nucleotide substitutions between the two species in the gene regions used for the analysis.
+
+```{r echo=TRUE}
+#ape::plot.phylo(mytree, use.edge.length = TRUE, cex=0.3)
+# infer matrix of pairwise patristic distances between all terminals
+# this takes quite some time for the example tree, because it is very large
+myPatristic <- adephylo::distTips(mytree)
+myPatristicM <- as.matrix(myPatristic)
+myPatristicMordered <- myPatristicM[order(rownames(myPatristicM)), order(rownames(myPatristicM))]
+MASS::write.matrix(myPatristicMordered, file=paste0("./",resultsFolder,"/","patristicDists_",myNameToProcess,".tsv"), sep="\t")
+
+#View(myPatristicMordered)
+# now calculate degrees of separation, i.e. counting nodes between any terminal and its ancestral lineage splits
+# this takes quite some time for the example tree, because it is very large
+myDegsep <- degreesofsep(mytree)
+myDegsep <- myDegsep[order(rownames(myDegsep)),order(rownames(myDegsep))]
+MASS::write.matrix(myDegsep, file=paste0("./",resultsFolder,"/","degSep_",myNameToProcess,".tsv"  ), sep="\t")
+
+# make data frame for one target species, with both its degrees of separation and patristic distances
+# this would probably make more sense as a function that gets myspecies and the data as parameters
+myspecies <- stringr::str_replace_all(targetSpecies, " ", "_")
+terminal <- row.names(myDegsep)
+degSep <- myDegsep[which(row.names(myDegsep)==myspecies),]
+patristicDist <- myPatristicMordered[which(row.names(myPatristicMordered)==myspecies),]
+phyloDists <- data.frame(terminal[order(patristicDist)],degSep[order(patristicDist)],patristicDist[order(patristicDist)])
+write.table(phyloDists, file=paste0("./",resultsFolder,"/","phylodists_", myspecies, ".tsv"), sep="\t")
+
+phyloDists
+```
+
+## Save Configuration File
+
+The code below saves out the user defined parameters so that the analyses could be re-run at a later date. This is particularly useful if the user plans on running this script several times using different taxonomic groups.
+
+```{r}
+configFileName <- paste0(resultsFolder, "/", resultsFolder, "_Config.rda")
+#print(configFileName)
+
+if(exists("myOutGroup")){
+  myOutGroup <- myOutGroup
+}else{
+    myOutGroup <- ""}
+
+if(exists("taxaToFindRecentCommonAncestorsFrom")){
+  taxaToFindRecentCommonAncestorsFrom <- taxaToFindRecentCommonAncestorsFrom
+}else{
+    taxaToFindRecentCommonAncestorsFrom <- ""}
+
+save(taxanomicGroups, targetSpecies, sequenceRegions, excludeSequences, limitSequencesReturnedTo, taxaToFindRecentCommonAncestorsFrom, myOutGroup, file = configFileName)
+
+```
+
+# Some Options to Explore
+
+## PhyloMaker
+
+[\<https://github.com/jinyizju/V.PhyloMaker\>](https://github.com/jinyizju/V.PhyloMaker){.uri}
+
+This R package makes phylogenetic hypotheses for a user-specified list of species, by providing multiple ways of binding the species (tips) to a backbone phylogeny, as described in Jin & Qian (2019).
+
+```{r echo=FALSE}
+# devtools::install_github("jinyizju/V.PhyloMaker")
+# 
+# library(V.PhyloMaker)
+# 
+# ### make the example file
+# c1 <- c("Carya floridana", "Carya pallida", "Epiprinus siletianus", "Platycarya strobilacea", "Tilia amurensis", "Apodanthes caseariae", "Pilostyles blanchetii")
+# c2 <- c("Carya", "Carya", "Epiprinus", "Platycarya", "Tilia", "Apodanthes", "Pilostyles")
+# c3 <- c("Juglandaceae", "Juglandaceae", "Euphorbiaceae", "Juglandaceae", "Malvaceae", "Apodanthaceae", "Apodanthaceae")
+# example <- data.frame(species = c1, genus = c2, family = c3)
+# 
+# ### run the function
+# result <- phylo.maker(example, scenarios=c("S1","S2","S3"))
+# 
+# ### plot the phylogenies with node ages displayed.
+# library(ape)
+# par(mfrow = c(1, 3))
+# plot.phylo(result$scenario.1, cex = 1.5, main = "scenario.1")
+# nodelabels(round(branching.times(result$scenario.1), 1), cex = 1)
+# plot.phylo(result$scenario.2[[1]], cex = 1.5, main = "scenario.2")
+# nodelabels(round(branching.times(result$scenario.2[[1]]), 1), cex = 1)
+# plot.phylo(result$scenario.3, cex = 1.5, main = "scenario.3")
+# nodelabels(round(branching.times(result$scenario.3), 1), cex = 1)
+
+```
+
+## DendExtend
+
+[\<https://cran.r-project.org/web/packages/dendextend/vignettes/dendextend.html\>](https://cran.r-project.org/web/packages/dendextend/vignettes/dendextend.html){.uri}
+
+This is an extension allowing some extra visualisations of the tree etc. worth exploring.

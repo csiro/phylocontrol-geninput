@@ -1,0 +1,208 @@
+---
+title: "4_Sequences_and_phylogenomics"
+format: html
+editor: visual
+author: Stephanie Chen
+---
+
+# About this script
+
+This code allows you to search GenBank for DNA markers for a list of species. The sequences are then downloaded and aligned for phylogenetic analysis to produce a phylogenetic tree (species tree).
+
+MacOS users: open `RStudio` using `open /Applications/RStudio.app` using the terminal.
+
+# Running code
+
+## **Load libraries**
+
+Load the R packages needed. For `phruta`, make sure that the packages `msa`, `DECIPHER`, `Biostrings`, and `odseq` are correctly installed.
+
+For the phylogenetic tree, `RAxML` needs to be installed on your computer. There are some notes at `https://github.com/ropensci/phruta`.
+
+Add the name of your study group so the files are placed in the right directories and set the study group and root directory (which will be in the folder for your study group).
+
+```{r setup}
+library(dplyr)
+
+#install.packages("phruta", repos = "https://ropensci.r-universe.dev")
+library(phruta)
+
+library(knitr)
+library(stringr)
+library(ape)
+library(ips)
+
+study_group <- "Erigeron"
+knitr::opts_knit$set(root.dir = paste0("./", study_group))
+```
+
+## **Import species list**
+
+Read in the csv with the species list.
+
+```{r}
+species_list <- read.csv(paste0(study_group, "_species_list.csv"), header = TRUE)
+species_vector <- species_list$Species
+```
+
+## **Retrieve DNA sequences from GenBank**
+
+We will search GenBank to check the distribution of genes for the organisms in our species list. A list of the target genes to retrieved based on a threshold (defaulted to markers available in at least 30% of taxa) is then made. The results will vary depending on the taxa queried and what sequencing data has been deposited to GenBank. The query is run on the vector of all species names.
+
+Important: if your function returns with Error(s): PhraseNotFound, you need to remove the problematic species the errors flagged up from your vector. This is due to mismatch with GenBank's taxonomic backbone. To do this, use the commented out code to clean the species vector, and run the function on the cleaned vector.
+
+```{r}
+genes_check <- gene.sampling.retrieve(species_vector,
+                       speciesSampling = TRUE,
+                       npar = 8,
+                       nSearchesBatch = 499)
+targetGenes <- genes_check[genes_check$PercentOfSampledSpecies > 30,]
+
+# If need to clean the species vector
+# species_to_remove <- c("Species_remove1", "Species_remove2")
+# 
+# species_vector_cleaned <- species_vector[!species_vector %in% species_to_remove]
+# genes_check <- gene.sampling.retrieve(species_vector_cleaned,
+#                         speciesSampling = TRUE,
+#                         npar = 8,
+#                         nSearchesBatch = 499)
+# targetGenes <- genes_check[genes_check$PercentOfSampledSpecies > 30,]
+```
+
+## Create accession table for downloading the gene sequences
+
+This code also makes sure there is only one of each species per gene in the accession table. There is some commented out code provided that can be used to remove problematic accessions.
+
+```{r}
+acc.table <- acc.table.retrieve(species = species_vector_cleaned,
+                                genes   = targetGenes$Gene,
+                                speciesLevel = TRUE,
+                                npar = 8,
+                                nSearchesBatch = 499)
+acc.table.unique <- distinct(acc.table, Species, gene, .keep_all = TRUE)
+
+# clean accessions causing error
+#acc.table.clean <- acc.table.unique[acc.table.unique$Acc != "KFRF00000000", ]
+```
+
+## Write the resulting fasta files into a newly created folder `0.Sequences`
+
+Download the sequences as fasta files. If you change download.sqs to FALSE, you can obtain a summary of the sequences to be downloaded. If you needed to clean problematic accessions first, makes sure you replace `acc.table.unique` with `acc.table.clean` in the following code chunk.
+
+```{r}
+sq.retrieve.indirect(acc.table.unique, download.sqs = TRUE)
+```
+
+Next, check which species in the list had no GenBank data. These species will not appear in the phylogenetic tree, and may help inform additional sequencing efforts.
+
+```{r}
+# Check if species in species_vector are in the 'Species' column of acc.table.unique
+species_in_dataframe <- species_vector %in% acc.table.unique$Species
+
+# Find species not in the dataframe and print out
+(species_not_in_dataframe <- species_vector[!species_in_dataframe])
+
+# Output species not in the dataframe to a text file
+write(species_not_in_dataframe, file = paste0(study_group, "/", "species_no_data.txt"))
+```
+
+## **Align DNA sequences**
+
+Alignment of the DNA sequences is conducted using `"BiocManager::install("DECIPHER")"`. This function first optimises the direction of the sequences before aligning them. It also masks the alignments as a default.
+
+```{r}
+sq.aln(folder = "0.Sequences",
+       FilePatterns = NULL,
+       mask = TRUE)
+```
+
+## Process alignments
+
+Next, we do some formatting of the sequences to remove the GenBank accessions from the sequence names so that a species tree can be made.
+
+```{r}
+setwd("./2.Alignments")
+
+# First loop: Replace spaces with underscores in file contents
+fasta_files <- list.files(pattern = "^Masked.*\\.fasta$")
+
+for (filename in fasta_files) {
+  # Extract the base filename
+  base_filename <- basename(filename)
+  
+  # Create new filename with _nospace
+  new_filename <- sub("\\.fasta$", "_nospace.fasta", base_filename)
+  
+  # Read the content, replace spaces, and write to new file
+  content <- readLines(filename)
+  content <- gsub(" ", "_", content)
+  
+  writeLines(content, new_filename)
+  
+  cat("Spaces replaced with underscores in the content of", filename, ". New file:", new_filename, "\n")
+}
+
+# Second loop: Remove text between '>' and the next underscore
+nospace_files <- list.files(pattern = "^Masked.*_nospace\\.fasta$")
+
+for (filename in nospace_files) {
+  # Create new filename with _species
+  output_file <- sub("\\.fasta$", "_species.fasta", filename)
+  
+  # Read the content, modify headers, and write to new file
+  content <- readLines(filename)
+  content <- gsub(">[^_]*_", ">", content)
+  
+  writeLines(content, output_file)
+  
+  cat("Text removed from", filename, ". New file:", output_file, "\n")
+}
+```
+
+## **Concatenation**
+
+Concatenate the alignments for all markers into a DNAbin.
+
+```{r}
+# Define the folder and file pattern
+alignment_folder <- "2.Alignments"
+alignment_files <- list.files(path = alignment_folder, pattern = "*_nospace_species.fasta", full.names = TRUE)
+
+# Read and store all alignments
+alignments_list <- lapply(alignment_files, read.dna, format = "fasta")
+
+# Ensure sequences are aligned and concatenate
+concatenated_alignment <- do.call(cbind.DNAbin, alignments_list)
+```
+
+## **Create the phylogenetic tree**
+
+Now, it is time create the phylogeny. In the first line of the code chunk, indicate the tip names of your outgroup(s) so that the tree is rooted appropriately. You can also root the tree in the PhyloControl visualisation app.
+
+The function `raxml` runs a Maximum Likelihood Tree Estimation with RAxML. Here, it is parameterised to run a rapid Bootstrap analysis and search for best scoring ML tree. To speed things up, which may be necessary for large matrices with lots of species and lots of genes, this step may be moved to High Performance Computing (HPC).
+
+The resulting phylogeny is saved as a Newick file (.tre) and there will be underscores (not spaces) in the scientific names.
+
+```{r}
+outgroups <- c("Boopis_anthemoides")
+
+# Create output directory for phylogeny results
+output_dir <- "./3.Phylogeny"
+if (!dir.exists(output_dir)) {
+  dir.create(output_dir)
+}
+setwd(paste0("./", output_dir))
+
+# Run RAxML using the ips package and save outputs in the new folder
+raxml(DNAbin = concatenated_alignment, exec = "raxmlHPC", f = "a", m = "GTRGAMMA", N = 100, p = 123, x = 123, threads = 8, outgroup = outgroups)
+
+# Read the best tree from RAxML output
+tree_file <- list.files(pattern = "RAxML_bestTree*", full.names = TRUE)
+tree <- read.tree(tree_file)
+
+# Save the modified tree as 'study_group.nwk' in the same folder
+write.tree(tree, file = paste0(study_group, ".tre"))
+
+# Read the saved file as plain text
+newick_text <- readLines(paste0(study_group, ".tre"))
+```

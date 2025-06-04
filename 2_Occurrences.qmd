@@ -1,0 +1,127 @@
+---
+title: "2_Spatial_data"
+format: html
+editor: visual
+author: Stephanie Chen
+---
+
+# About this script
+
+This code allows you to obtain point observation data from the Global Biodiversity Information Facility (GBIF) using the package `rgbif`. To obtain the spatial data, you will need a list of your study species which can be generated with the Quarto notebook `1_Species_list`. You can also start with own species list as a csv file with scientific names in a column with the header 'Species'.
+
+# Running code
+
+## **Load libraries**
+
+We will first load the R packages needed. Also nominate your study group and set the working directory here.
+
+```{r setup}
+library(rgbif)
+library(mapview)
+library(sf)
+library(dplyr)
+library(sfheaders)
+library(maps)
+library(countrycode)
+library(sp)
+library(rworldmap)
+
+study_group <- "Erigeron"
+knitr::opts_knit$set(root.dir = paste0("./", study_group))
+```
+
+## **Import species list**
+
+The provided species list csv file must have the list of species (scientific names) in the column named 'Species'. If there are underscores in the scientific names, these will be replaced with spaces.
+
+```{r}
+species_list <- read.csv(paste0(study_group, "/", study_group, "_species_list.csv"), header = TRUE)
+
+species_sublist <- species_list |>
+  dplyr::select(Species) |>
+  mutate(species_no_underscore = gsub("_", " ", Species))
+```
+
+## **Fetch occurrences from GBIF**
+
+Add your GBIF account credentials to the start of the code block. Download the occurrence data from GBIF and then do some filtering. The input species are also checked against being an accepted species in the taxonomic backbone.
+
+Paste your unique download key in the command. The key will be output in the console when you start the request. It will be a string of numbers with a dash e.g. 0001234-999999999999999.
+
+```{r}
+# Fill in your gbif.org credentials 
+user <- "username" # your gbif.org username 
+pwd <- "password" # your gbif.org password
+email <- "name@email.com" # your email 
+
+# Match the names 
+gbif_taxon_keys <- species_sublist$species_no_underscore |>
+  name_backbone_checklist()  %>% # match to backbone
+  filter(!matchType == "NONE") %>% # get matched names
+  pull(usageKey) # get the gbif taxonkeys
+
+# Start the download
+occ_download(pred_in("taxonKey", gbif_taxon_keys),
+             pred_in("basisOfRecord", c('PRESERVED_SPECIMEN')),
+             pred("hasCoordinate", TRUE),
+             pred("hasGeospatialIssue", FALSE),
+             format = "SIMPLE_CSV",
+             user = user, pwd = pwd, email = email)
+
+# Most downloads finish within 15 min. Check status with your download key that will appear in the console after you run occ_download
+occ_download_wait('DOWNLOAD-KEY')
+
+# Get data once the download is done by pasting the key in this command
+occurrences_qc <- occ_download_get('DOWNLOAD-KEY', path = paste0("./", study_group), overwrite = TRUE) |>
+  occ_download_import() |>
+  filter(species %in% species_sublist$species_no_underscore) |>
+  filter(taxonRank == "SPECIES") |>
+  filter(!is.na(species)) |>
+  filter(!grepl("cultivated", locality, ignore.case = TRUE))
+```
+
+The results will also be available to view on the downloads page on GBIF once you log into your account: <https://www.gbif.org/user/download>.
+
+## **Add country information**
+
+Next, we will set up a function for adding country information to the occurrence data frame and then filter out rows without countries assigned. This will allow you to select occurrences to view by country in the Map tab of the PhyloControl visualisation application.
+
+```{r}
+coords2country = function(points) {  
+  countriesSP <- getMap(resolution = 'low')
+  
+  #setting CRS directly to that from rworldmap
+  pointsSP <- SpatialPoints(points, proj4string = CRS(proj4string(countriesSP)))  
+  
+  # use 'over' to get indices of the Polygons object containing each point 
+  indices <- over(pointsSP, countriesSP)
+  
+  # return the ADMIN names of each country
+  indices$ADMIN  
+  #indices$ISO3        # returns the ISO3 code 
+  #indices$continent   # returns the continent (6 continent model)
+  #indices$REGION      # returns the continent (7 continent model)
+}
+
+occurrences_qc$country <- as.character(coords2country(data.frame(lon = occurrences_qc$decimalLongitude, lat = occurrences_qc$decimalLatitude)))
+
+occurrences_qc1 <- occurrences_qc |>
+  filter(!is.na(country))
+```
+
+## Plot the data
+
+As an optional sanity check, we can visualise all the occurrence data on a map coloured by species.
+
+```{r}
+occ_sf <- st_as_sf(occurrences_qc1, coords = c("decimalLongitude","decimalLatitude"), crs = 4326)
+mapview(occ_sf, zcol = "species")
+```
+
+## Export spatial occurrence data
+
+Finally, export the downloaded data as a csv file to use with the PhyloControl visualisation application into the folder named after your study group.
+
+```{r}
+write.csv(occurrences_qc1, file = paste0(study_group, "/", study_group, "_occurrences.csv"))
+```

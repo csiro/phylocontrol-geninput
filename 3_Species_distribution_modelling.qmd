@@ -1,0 +1,573 @@
+---
+title: "3_Species_distribution_modelling"
+format: html
+editor: visual
+authors: 
+  - Nunzio Knerr
+  - Stephanie Chen
+---
+
+# About this script
+
+This code is for running species distribution models (SDMs) using a maximum entropy approach (MaxEnt) and/or CLIMATCH to estimate the probability of presence of a species in any given area. Running these SDMs involves using underlying spatial layers and in the case of CLIMATCH, also a target area polygon for the predictions. In summary, the code:
+
+1.  Imports the occurrence data created generated using the 2_Occurrences Quarto notebook.
+2.  Downloads [CHELSA](https://chelsa-climate.org/) climate data.
+3.  Saves a user specified country as a shape (.shp) file for use with CLIMATCH.
+4.  Iterates through the occurrence data and makes predictions for each taxon and saves the results locally.
+5.  Enables the user to load and display the SDM results, including comparing the results from MaxEnt and CLIMATCH.
+
+# Running code
+
+## **Set up dependencies (MaxEnt)**
+
+MaxEnt may be downloaded from `https://biodiversityinformatics.amnh.org/open_source/maxent/`. After unzipping the file, make sure the `maxent.jar` executable is copied into the dismo java directory. The directory can be found using the first line of code in the following chunk. In this code chunk, we also increase the memory allocated to java.
+
+```{r setup}
+system.file("java", package = "dismo")
+options(java.parameters = "-Xmx15g")
+```
+
+## **Install and load libraries**
+
+Load the R packages needed. Some of the packages may need to installed from GitHub. Also nominate your study group and set the working directory.
+
+```{r setup}
+library(dismo)
+# Set up Java
+#Sys.setenv(JAVA_HOME="/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home/")
+#dyn.load("/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home/lib/server/libjvm.dylib")
+library(rJava)
+library(rworldmap)
+library(maps)
+library(mapview)
+library(dplyr)
+library(stringr)
+library(sf)
+library(terra)
+library(leafsync)
+library(geodata)
+library(raster)
+library(terra)
+library(leaflet)
+
+#if (!require("pak")) install.packages("pak")
+#pak::pkg_install('git::https://code.usgs.gov/umesc/quant-ecology/climatchr.git')
+library(climatchR)
+
+#if(!require(devtools)) install.packages(devtools)
+#library(devtools)
+#devtools::install_github("HelgeJentsch/ClimDatDownloadR")
+library(ClimDatDownloadR)
+
+study_group <- "Erigeron"
+knitr::opts_knit$set(root.dir = paste0("./", study_group))
+```
+
+## **Import occurrence data**
+
+This code chuck imports the occurrence data obtained using the `2_Occurrences` Quarto notebook and sets up parameters for use later on in the script. It also creates a unique taxon list from the occurrence data for creating folder names to place results and for running the loops on each taxon.
+
+```{r}
+occ_data <-
+  read.csv(paste0(study_group, "/", study_group, "_occurrences.csv"),
+           header = TRUE)
+#View(occ_data)
+#colnames(occ_data)
+
+filtered_occ_data <- occ_data |>
+  dplyr::select("species", "decimalLatitude", "decimalLongitude") |>
+  filter(!is.na(decimalLatitude)) |>
+  filter(!is.na(decimalLongitude))
+
+# Get list of species
+species_list <- unique(filtered_occ_data$species)
+
+# Plot occurrences on map (optional)
+#occ_map <- st_as_sf(filtered_occ_data, coords = c("decimalLongitude", "decimalLatitude" ))
+#mapview(occ_map)
+```
+
+## **Download CHELSA layers**
+
+This code chunk makes use of the package [`ClimDatDownloadR`](https://github.com/HelgeJentsch/ClimDatDownloadR) for downloading the spatial data into a folder called CHELSA. We will use all the bio variables that are not derived from other bio variables from CHELSA v2.1.
+
+```{r}
+#CHELSA variables
+map_version_chelsa <- "2.1"
+chelsa_dir <- paste0("chelsa", map_version_chelsa, "_bio/")
+
+#Get CHELSA layers for ClimatchR
+options(timeout = 3600)
+# Create directory for environmental layers
+if (!file.exists("CHELSA")) {
+  # Create the directory
+  dir.create("CHELSA")
+  cat("Directory 'CHELSA' created.\n")
+  
+  # Set up WorldClim layers
+  Chelsa.Clim.download(
+    save.location = "CHELSA/",
+    # parameter = c("prec", "temp", "tmax","tmin", "srad", "wind", "vapr", "bio", "elev"),
+    parameter = c("bio"),
+    month.var = c(1:12),
+    bio.var = c(1,5:19),
+    # Here the resolution of the downloaded data set must be added
+    # If no input is given all resolutions will be downloaded
+    # CHELSA also recently had an update to version 2.1
+    version.var = map_version_chelsa,
+    # Here the newer version is chosen
+    #clipping = TRUE,
+    #clip.extent = c(113, 154, -44, -10),  # clip to Australia
+    #clip.extent = c(113, 179, -47, -10),  # clip to Australia and NZ
+    buffer = 5,
+    convert.files.to.asc = FALSE,
+    stacking.data = FALSE,
+    # here you can choose if you want to keep the downloaded zip-file
+    combine.raw.zip = FALSE,
+    delete.raw.data = FALSE,
+    save.bib.file = TRUE
+  )
+  
+} else {
+  cat("Directory 'CHELSA' already exists.\n")
+}
+```
+
+## Aggregate CHELSA layers
+
+The CHELSA layers were downloaded at 30 arc seconds resolution. To make everything run faster, this code aggregates the layers up to 10 minutes (although this can be changed by adjusting the aggregation factor).
+
+```{r}
+maps_folder <- paste0("./CHELSA/bio/ChelsaV2.1Climatologies")
+
+rasterFiles <- list.files(path = maps_folder, pattern = '\\.tif$', full.names = TRUE, recursive = TRUE)
+
+rasterStack <- stack(rasterFiles)  # load the rasters into a stack
+aggregation_factor <- 20 # aggregation factor (replace with your desired factor)
+
+# Aggregate the raster stack
+aggregated_stack <- aggregate(rasterStack, fact = aggregation_factor, fun = mean)
+output_folder <- paste0("./CHELSA/bio/ChelsaV2.1Climatologies", "_agg_", aggregation_factor)
+
+dir.create(output_folder)
+#plot(aggregated_stack)
+
+for (i in 1:nlayers(aggregated_stack)) {
+  # Extract the i-th layer
+  #i = 1
+  layer <- aggregated_stack[[i]]
+  layer_name <- aggregated_stack[[i]]@data@names
+  # Create the output file name (adjust as needed)
+  output_file <- file.path(output_folder, paste0(layer_name, "_agg_", aggregation_factor, ".tif"))
+  # Write the layer to GeoTIFF
+  writeRaster(layer, filename = output_file, format = "GTiff", overwrite = TRUE)
+  # Print a message indicating the progress
+  cat("Layer", i, "written to: ", output_file, "\n")
+}
+
+maps_folder <- paste0("./CHELSA/bio/ChelsaV2.1Climatologies_agg_20")
+
+rasterFiles <- list.files(path = maps_folder, pattern = '\\.tif$', full.names = TRUE, recursive = TRUE)
+
+rasterStack <- stack(rasterFiles)
+#plot(rasterStack)
+```
+
+# MaxEnt
+
+## Import spatial layers
+
+Next, we will import the climate data we just downloaded. Optional: crop the stack to a specific bounding box specified by the user, aggregate points by a specified factor, and/or change the projection of the raster stack.
+
+```{r}
+maps_folder <-  paste0("./CHELSA/bio/ChelsaV2.1Climatologies_agg_20")
+
+rasterFiles <- list.files(path = maps_folder, pattern = '\\.tif$', full.names = TRUE, recursive = TRUE)
+
+rasterList <- lapply(1:length(rasterFiles), function(x) raster(rasterFiles[[x]]))
+rasterStack <- stack(rasterList)  # load the rasters into a stack
+
+#plot(rasterStack)
+# Crop stack
+#disp_win_wgs84 <- st_sfc(st_point(c(104, -45)), st_point(c(154, -5)), crs = 4326)
+#bb <- st_bbox(disp_win_wgs84) #Get the bounding box 
+#predictors <- crop(rasterStack, extent(bb$xmin, bb$xmax, bb$ymin, bb$ymax)) #crop the rasters to the extent
+#plot(predictors)
+
+# Aggregate rasters to a specified factor
+#predictors_agg <- aggregate(rasterStack, 5, func=mean)
+#plot(predictors_agg)
+#rasterStack <- predictors_agg
+
+# Change projection if needed
+#library(raster)
+# Define the new projection using the proj4string or CRS object. For example, let's change it to WGS 84 (EPSG:4326)
+#new_projection <- "+proj=longlat +datum=WGS84 +ellps=WGS84 +towgs84=0,0,0"
+# Project the raster to the new projection
+#raster_projected <- projectRaster(rasterStack, crs = new_projection)
+# Print the details of the new raster
+#print(raster_projected)
+#rasterStack <- raster_projected
+
+# Create background data and write it out. Only used in first iteration
+bg <- randomPoints(rasterStack, 10000)
+#View(bg)
+
+#write.csv(bg, file = "CHELSA/bio/background_points_for_maxent.csv", row.names = FALSE)
+
+# read the background points in
+bg <- read.csv("CHELSA/bio/background_points_for_maxent.csv", header = TRUE)
+```
+
+## **MaxEnt function**
+
+The function to run MaxEnt is defined here.
+
+```{r}
+run_maxent <- function(taxon, points, maplayers, backgroundpoints){
+
+  #options(java.parameters = "-Xmx48g")     # or 8g, or larger than this, ...
+options(java.parameters = c("-XX:+UseConcMarkSweepGC", "-Xmx38192m"))
+  start_time <- Sys.time()
+  
+results_path <- paste0(study_group, "/sdm/maxent_results/", chelsa_dir, tools::file_path_sans_ext(basename(taxon)))
+
+  me <- maxent(maplayers, points, a = backgroundpoints, factors = NULL,  path = results_path, removeDuplicates = TRUE, overwrite = TRUE, silent = TRUE)
+#show(me)
+  
+  # predict to entire dataset
+  r <- predict(me, maplayers, args=c("outputformat=cloglog"), progress = 'text', filename = paste0(results_path, "/maxent_predict.grd"), overwrite = TRUE)
+  
+  # evaluate model
+  e1 <- evaluate(me, p = points, a = backgroundpoints, x = maplayers)
+  threshold_vals <- threshold(e1, stat = '', sensitivity = 0.9)
+
+  threshold_spec_sens <- threshold_vals$spec_sens 
+  threshold_val_to_spec_sens <- threshold_spec_sens-0.001
+ 
+  threshold_kappa <- threshold_vals$kappa 
+  threshold_val_to_kappa <- threshold_kappa-0.001
+ 
+  threshold_sensitivity_0.9 <- threshold_vals$sensitivity
+  if(threshold_sensitivity_0.9 > 1) {
+    threshold_sensitivity_0.9 <- 1}
+  
+  threshold_val_to_sensitivity_0.9 <- threshold_sensitivity_0.9-0.001
+   
+  TPR_threshold_kappa <- e1@TPR[which(e1@t==threshold_kappa)]
+  TPR_threshold_spec_sens <- e1@TPR[which(e1@t==threshold_spec_sens)]
+  TPR_threshold_sensitivity_0.9 <- e1@TPR[which(e1@t==threshold_sensitivity_0.9)]
+   
+  PPP_threshold_kappa <- e1@PPP[which(e1@t==threshold_kappa)]
+  PPP_threshold_spec_sens <- e1@PPP[which(e1@t==threshold_spec_sens)]
+  PPP_threshold_sensitivity_0.9 <- e1@PPP[which(e1@t==threshold_sensitivity_0.9)]
+   
+  colnames(threshold_vals) <- c("kappa", "spec_sens", "no_omission" , "prevalence", "equal_sens_spec","sensitivity_0.9") 
+  threshold_vals$TPR_threshold_kappa <- TPR_threshold_kappa 
+  threshold_vals$TPR_threshold_spec_sens <- TPR_threshold_spec_sens
+  threshold_vals$TPR_threshold_sensitivity_0.9 <- TPR_threshold_sensitivity_0.9
+   
+  threshold_vals$PPP_threshold_kappa <- PPP_threshold_kappa 
+  threshold_vals$PPP_threshold_spec_sens <- PPP_threshold_spec_sens
+  threshold_vals$PPP_threshold_sensitivity_0.9 <- PPP_threshold_sensitivity_0.9
+  
+  #View(threshold_vals)
+  save(e1, file = paste0(results_path,"/maxent_ModelEvaluation.RData"))
+  write.csv(threshold_vals, file = paste0(results_path,"/maxent_thresholds.csv"), row.names = FALSE)
+
+  end_time <- Sys.time()
+  time_diff_minutes <- as.numeric(difftime(end_time, start_time, units = "mins"))
+cat("Last analysis took: ", time_diff_minutes, " minutes\n")
+cat("Modelling Taxon: ")
+  
+}
+```
+
+## **Run MaxEnt**
+
+Loop through the species. It is a good idea to first test this on a few species (use the second line instead of the first for the loop). This may take a while to run depending on how big your data are and the computational resources available. The results for each species will be saved in a separate folder.
+
+A note for troubleshooting: if you are using OneDrive, pause the syncing or quit the application before running, as otherwise there may be errors about 'Cannot write to connection' for some species.
+
+```{r}
+for(i in 1:length(species_list)){
+#for(i in 1:2){  # testing on the first two species
+  print(paste("Processing species number:", i, "out of", length(species_list)))
+  taxon_folder_name <- str_replace_all(species_list[i], " ", "_")
+  print(taxon_folder_name)
+  mydata <- occ_data |>
+    filter(species == species_list[i])
+  points <- mydata[, c("decimalLongitude", "decimalLatitude")]
+
+  run_maxent(taxon = taxon_folder_name, points = points, maplayers = rasterStack, backgroundpoints = bg)
+}
+```
+
+## **View MaxEnt results**
+
+We can visualise the results on a map. Change the scientific name 'Bellis_perennis' from the demo dataset to the species that you would like to visualise. This should look similar to what is displayed on the Model tab in the PhyloControl visualisation application.
+
+```{r}
+# Create an sf object using the x and y columns for lat and long
+occurences_sf <- st_as_sf(filtered_occ_data, coords = c("decimalLongitude", "decimalLatitude"), crs = 4326)
+
+maxent_result_grd <- rast(paste0("./Erigeron/maxent_results/Bellis_perennis/maxent_predict.grd"))
+plot(maxent_result_grd)
+#crs(maxent_result_grd)
+
+maxent_result_grd <- project(maxent_result_grd, "EPSG:4326")
+
+# Crop raster
+disp_win_wgs84 <- st_sfc(st_point(c(104, -45)), st_point(c(154, -5)), crs = 4326)
+bb <- st_bbox(disp_win_wgs84) #Get the bounding box 
+cropped_maxent_result_grd <- crop(maxent_result_grd, extent(bb$xmin, bb$xmax, bb$ymin, bb$ymax)) #crop the rasters to the extent
+#plet(cropped_maxent_result_grd)
+
+maxent_thresholds_file <- paste0("./Erigeron/maxent_results/Bellis_perennis/maxent_thresholds.csv")
+
+maxent_thresholds <- read.csv(maxent_thresholds_file, header = TRUE)
+
+#View(maxent_thresholds)
+
+# Select specific columns: kappa, spec_sens, equal_sens_spec, sensitivity_0.9
+selected_columns <- maxent_thresholds %>%
+                    select(kappa, spec_sens, equal_sens_spec, sensitivity_0.9) %>%
+                    pivot_longer(cols = everything(), names_to = "threshold", values_to = "value") %>%
+                    arrange(value)
+
+#View(selected_columns)
+
+# Extract values and labels from the data
+values <- selected_columns$value
+labels <- selected_columns$threshold
+
+# Create the colorBin object
+colors <- colorBin(palette = c("transparent", "yellow", "orange", "red", "red"),
+                   domain = c(0, values, 1),
+                   na.color = "transparent",
+                   alpha = TRUE,
+                   reverse = FALSE,
+                   bins = 5)
+
+plet(cropped_maxent_result_grd, col=colors)#, 
+
+#numeric version with adding to existing leaflet map
+#colors <- colorNumeric(palette = c("white", "white", "yellow", "orange", "red", "red"),  domain = c(0, values, 1), na.color = "transparent", alpha=TRUE, reverse=FALSE)
+
+#All maxent results
+test <- leaflet() %>% addTiles() %>%
+  addMarkers(data = occurences_sf[1:1000,], popup = ~scientificName)
+   
+plet(cropped_maxent_result_grd, col=colors, map=test)
+```
+
+# CLIMATCH
+
+## ClimatchR function
+
+Next up is the code for running CLIMATCH. First, we will set up the shape file (defaulted to Australia in the code; change as needed) and function.
+
+```{r}
+# First create the results folder to save the results in
+dir.create(paste0(study_group, "/sdm/climatch_results/", chelsa_dir), recursive = TRUE)
+
+# Create a function to get the shape file used as a target
+# Default is set for Australia
+create_target_country_shapefile <- function(target_country_name = "Australia"){
+  results_path <- paste0(study_group, "/sdm/climatch_results/", chelsa_dir) 
+  # Load the world map data
+  world_map <- getMap(resolution = "high")
+  #get target country 
+  if(target_country_name == "World"){
+    target_country <- world_map
+  } else {
+      target_country <- world_map[grepl(target_country_name, world_map$NAME, ignore.case = TRUE), ]
+  }
+  # Convert to sf object
+  target_country_sf <- st_as_sf(target_country)
+  # Write target_country to a shapefile using sf
+  st_write(target_country_sf, paste0(results_path, target_country_name, ".shp")) 
+}
+
+#create_target_country_shapefile(target_country_name = "World")
+
+# Function to rescale raster values between 0 and 1
+# Function to be applied on the raster values; return: SpatRaster object
+rescale01 <- function(x) {
+   val <- values(x)
+   values(x) <- (val - min(val, na.rm = TRUE)) / (max(val, na.rm = TRUE) - min(val, na.rm = TRUE))
+   x
+}
+
+#usage
+# Rescale values of SpatRaster object with nlyr = 1
+#r1_01 <- rescale01(r1)
+# Rescale values of SpatRaster object with nlyr > 1
+#clim_stack <- lapply(clim_stack, rescale01) |> rast()
+
+run_climatch <- function(climate_layers_path,
+                         target_country_shape_file = "Australia.shp",
+                         taxon,
+                         x_col = "decimalLongitude",
+                         y_col = "decimalLatitude",
+                         taxon_name_col = "species",
+                         crs = "EPSG:4326",
+                         climatch_method = "norm_eucl",
+                         climatch_sensitivity = 1,
+                         output_format = "grd"){
+  
+  results_path <- paste0(study_group, "/sdm/climatch_results/", chelsa_dir, tools::file_path_sans_ext(basename(taxon))) 
+  base_path <- paste0(study_group, "/sdm/climatch_results/", chelsa_dir)
+
+  #load Climate Layers as stack
+  climate_layers <- climate_layers_path
+  clim_stack <- clim_stacker(climate_layers, pattern = "*.tif$")
+  clim_stack_rescaled <- lapply(clim_stack, rescale01) |> rast()
+
+  #extract data from climate layers at target taxon locations
+  occ_data <- read_occ_data(path=taxon, crs = crs, x=x_col, y=y_col, name_col=taxon_name_col,
+                            clim_dat = clim_stack_rescaled)
+
+  #create intersects for target country
+  intersect_by_target(clim_dat=clim_stack_rescaled, vect_path=paste0(base_path,target_country_shape_file), col="ADMIN", out_path = paste0(results_path,"/intersect.rds"))
+
+  target_data <- readRDS(paste0(results_path,"/intersect.rds"))
+
+  climatch_calcs <- calc_climatch(occ_dat = occ_data,
+              target_dat = target_data, 
+              sensitivity = climatch_sensitivity, 
+              progress = TRUE,
+              method = climatch_method) #clim_dist,norm_eucl
+
+  #View(climatch_calcs)
+  #climatch_sf <- st_as_sf(climatch_points, coords= c("target_x", "target_y"), crs=4326)
+
+  climatch_to_raster(climatch_calcs, crs=my_crs, out_path=paste0(results_path, "/climatch_predict.",output_format), overwrite=TRUE)
+  
+}
+```
+
+## Run CLIMATCH
+
+This code calls the functions above to run through each taxon in the species list.
+
+```{r}
+create_target_country_shapefile(target_country_name = "Australia")
+
+for(i in 1:length(species_list)){
+#for(i in 1:2){. # test on first two species
+  current_time <- Sys.time()
+  print(paste0("Time now: ", current_time))
+  print(paste0("Matching: ", species_list[i], " ", i, " of ", length(species_list)))
+  taxon_folder_name <- str_replace_all(species_list[i], " ", "_")
+  #print(taxon_folder_name)
+  results_path <- paste0(study_group, "/sdm/climatch_results/", chelsa_dir, tools::file_path_sans_ext(basename(taxon_folder_name))) 
+  dir.create(results_path)
+  mydata <- filtered_occ_data |>
+    filter(species == species_list[i]) |>
+    dplyr::select("species", "decimalLatitude", "decimalLongitude")
+  
+  write.csv(mydata, file=paste0(results_path, "/", taxon_folder_name,".csv"), row.names=FALSE)
+  
+  my_climate_layers <- "./CHELSA/bio/ChelsaV2.1Climatologies_agg_20"
+  my_target_country <- "Australia.shp"
+  taxon_occ_file <- paste0(results_path, "/", taxon_folder_name,".csv")
+  my_crs = "EPSG:4326"
+  
+  run_climatch(climate_layers_path = my_climate_layers, target_country_shape_file=my_target_country, taxon=taxon_occ_file, crs=my_crs, x_col="decimalLongitude", y_col="decimalLatitude", taxon_name_col ="species", climatch_method="norm_eucl", climatch_sensitivity=1, output_format="grd")
+    
+}
+```
+
+## View CLIMATCH results
+
+We can look at the CLIMATCH results on a map. Change the scientific name 'Callistephus_chinensis' from the demo data to a species in your run.
+
+```{r}
+climatch_result_grd <- rast(paste0("./Erigeron/climatch_results/chelsa2.1_bio/Callistephus_chinensis/climatch_predict.grd"))
+#plot(climatch_result_grd)
+
+#summary(climatch_result_grd)
+
+# Create the colorBin object
+ colors <- colorBin(palette = c("darkgreen", "chartreuse4", "chartreuse2", "yellow", "gold1","orange", "orange3", "red", "red4", "purple4"),
+                    domain = c(0,1,2,3,4,5,6,7,8,9,10),
+                    na.color = "transparent",
+                    alpha = TRUE,
+                    reverse = FALSE,
+                    bins = 10)
+
+plet(climatch_result_grd, col=colors)
+```
+
+# Comparison
+
+## Compare MaxEnt with CLIMATCH
+
+If you have run both SDM methods, you can visualise the results side-by-side on a map. The default provided is the target weed, flaxleaf fleabane (*Erigeron bonariensis*), from the demo dataset.
+
+```{r}
+# species_list
+species_to_compare <- "Erigeron_bonariensis"
+  
+#"Callistephus_chinensis"
+#"Erigeron_bonariensis"
+#"Erigeron_sumatrensis"
+#"Brachyscome_papillosa"
+#"Olearia_lanuginosa"
+
+# view different aspects of same data set
+maxent_result_grd <- rast(paste0("./Erigeron/maxent_results/chelsa2.1_bio/", species_to_compare, "/maxent_predict.grd"))
+#plot(maxent_result_grd)
+
+# Crop raster
+disp_win_wgs84 <- st_sfc(st_point(c(104, -45)), st_point(c(154, -5)), crs = 4326)
+bb <- st_bbox(disp_win_wgs84) #Get the bounding box 
+maxent_result_grd <- crop(maxent_result_grd, extent(bb$xmin, bb$xmax, bb$ymin, bb$ymax)) #crop the rasters to the extent
+maxent_result_grd <- project(maxent_result_grd, "EPSG:4326")
+
+maxent_thresholds_file <- paste0("./Erigeron/maxent_results/chelsa2.1_bio/", species_to_compare, "/maxent_thresholds.csv")
+
+maxent_thresholds <- read.csv(maxent_thresholds_file, header = TRUE)
+
+#View(maxent_thresholds)
+
+# Select specific columns: kappa, spec_sens, equal_sens_spec, sensitivity_0.9
+selected_columns <- maxent_thresholds %>%
+                    select(kappa, spec_sens, equal_sens_spec, sensitivity_0.9) %>%
+                    pivot_longer(cols = everything(), names_to = "threshold", values_to = "value") %>%
+                    arrange(value)
+
+# Extract values and labels from the data
+values <- selected_columns$value
+labels <- selected_columns$threshold
+
+# Create the colorBin object
+maxent_colors <- colorBin(palette = c("transparent", "yellow", "orange", "red", "red"),
+                   domain = c(0, values, 1),
+                   na.color = "transparent",
+                   alpha = TRUE,
+                   reverse = FALSE,
+                   bins = 5)
+
+climatch_result_grd <- rast(paste0("./Erigeron/maxent_results/chelsa2.1_bio/", species_to_compare, "/climatch_predict.grd"))
+
+# Create the colorBin object
+climatch_colors <- colorBin(palette = c("darkgreen", "chartreuse4", "chartreuse2", "yellow", "gold1","orange", "orange3", "red", "red4", "purple4"),
+                    domain = c(0,1,2,3,4,5,6,7,8,9,10),
+                    na.color = "transparent",
+                    alpha = TRUE,
+                    reverse = FALSE,
+                    bins = 10)
+
+maxent <- leaflet() %>% 
+          addTiles() %>%
+          addProviderTiles("Esri.WorldImagery")
+
+m1 <- plet(maxent_result_grd, col=maxent_colors, map=maxent)
+m2 <- plet(climatch_result_grd, col=climatch_colors, legend=NULL)
+
+sync(m1, m2) # 2 panels synchronised
+
+```
