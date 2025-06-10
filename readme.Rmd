@@ -57,11 +57,11 @@ A `sdm/` folder containing folders `maxent_results/` and/or `climatch_results/`.
 
 A phylogenetic tree in Newick format e.g. `Erigeron.tre`
 
-It is recommended to copy the output files needed for the PhyloControl visualisation application into a separate directory set up specifically for the visualisation app. There, you can also optionally add a text file containing the default target weed as well as a csv file containing traits to visualise with heatmaps.
+It is recommended to copy the output files needed for the PhyloControl visualisation application into a separate directory set up specifically for the visualisation app which contains a folder for each study group e.g. `App_data/Erigeron/`. You can also optionally add a text file containing the default target weed as well as a csv file containing traits to visualise with heatmaps. For an example of this directory structure, have a look at the App_data folder in the [supplementary data for the manuscript](https://data.csiro.au/collection/csiro:64365).
 
 ## Demo server
 
-Try out the demo version of the visualisation application at <https://shiny.csiro.au/phylocontrol-viz-demo/>.
+Try out the [demo version of the visualisation application](https://shiny.csiro.au/phylocontrol-viz-demo/).
 
 ## Code of Conduct
 
@@ -69,6 +69,6 @@ Please note that the phylocontrol.viz project is released with a [Contributor Co
 
 ## Citing PhyloControl
 
-Publication details TBA.
+The PhyloControl paper is currently in review. For now, please cite the pre-print on bioRxiv.
 
-> Stephanie H. Chen, Lauren Stevens, Ben Gooden, Michelle A. Rafter, Nunzio Knerr, Peter H. Thrall, Louise Ord, Alexander N. Schmidt-Lebuhn (YEAR). PhyloControl: a phylogeny visualisation platform for risk analysis in weed biological control. JOURNAL. DOI
+> Stephanie H. Chen, Lauren Stevens, Ben Gooden, Michelle A. Rafter, Nunzio Knerr, Peter H. Thrall, Louise Ord, Alexander N. Schmidt-Lebuhn (2025). PhyloControl: a phylogeny visualisation platform for risk analysis in weed biological control. bioRxiv. DOI
