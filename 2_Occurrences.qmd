@@ -7,7 +7,7 @@ author: Stephanie Chen
 
 # About this script
 
-This code allows you to obtain point observation data from the Global Biodiversity Information Facility (GBIF) using the package `rgbif`. To obtain the spatial data, you will need a list of your study species which can be generated with the Quarto notebook `1_Species_list`. You can also start with own species list as a csv file with scientific names in a column with the header 'Species'.
+This code allows you to obtain point observation data from the Global Biodiversity Information Facility (GBIF) using the package `rgbif`. To obtain the spatial data, you will need a list of your study species which can be generated with the Quarto notebook `1_Species_list`. You can also start with your own species list as a csv file with scientific names in a column with the header 'Species'.
 
 # Running code
 
