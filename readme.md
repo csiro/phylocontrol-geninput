@@ -1,7 +1,7 @@
 
 <!-- README.md is generated from README.Rmd. Please edit that file -->
 
-# `phylocontrol.geninput`
+# `phylocontrol-geninput`
 
 <!-- badges: start -->
 
@@ -30,9 +30,9 @@ interactive interface, empowering biocontrol practitioners to summarise,
 visualise, and analyse data efficiently.
 
 This repository,
-[`phylocontrol.geninput`](https://github.com/csiro/phylocontrol-geninput/),
+[`phylocontrol-geninput`](https://github.com/csiro/phylocontrol-geninput),
 contains the four Quarto notebooks to generate inputs for the R Shiny
-visualisation application available from the [`phylocontrol.viz`
+visualisation application available from the [`phylocontrol-viz`
 repository](https://github.com/csiro/phylocontrol.viz).
 
 <p align="center">
@@ -99,17 +99,17 @@ application](https://shiny.csiro.au/phylocontrol-viz-demo/).
 
 ## Code of Conduct
 
-Please note that the phylocontrol.viz project is released with a
-[Contributor Code of
+Please note that this project is released with a [Contributor Code of
 Conduct](https://contributor-covenant.org/version/2/1/CODE_OF_CONDUCT.html).
 By contributing to this project, you agree to abide by its terms.
 
 ## Citing PhyloControl
 
 The PhyloControl paper is currently in review. For now, please cite the
-pre-print on bioRxiv.
+[pre-print on bioRxiv](https://doi.org/10.1101/2025.06.11.658203).
 
 > Stephanie H. Chen, Lauren Stevens, Ben Gooden, Michelle A. Rafter,
 > Nunzio Knerr, Peter H. Thrall, Louise Ord, Alexander N. Schmidt-Lebuhn
 > (2025). PhyloControl: a phylogeny visualisation platform for risk
-> analysis in weed biological control. bioRxiv. DOI
+> analysis in weed biological control. bioRxiv. DOI:
+> [10.1101/2025.06.11.658203](https://doi.org/10.1101/2025.06.11.658203)
