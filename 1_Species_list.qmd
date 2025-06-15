@@ -16,7 +16,7 @@ This code helps you obtain a list of species for use with PhyloControl. The info
 We will load the R packages used in this notebook. Some libraries are not available on CRAN so the installation code has been provided (and commented out) in this chunk.
 
 ```{r setup}
-#if(!require(devtools)) install.packages(devtools)
+#if(!require(devtools)) install.packages('devtools')
 #library(devtools)
 #devtools::install_github("barnabywalker/kewr")
 library(kewr)
@@ -49,7 +49,7 @@ if (!dir.exists(dir_name)) {
 
 The `kewr` package is used to search for accepted species in the target biocontrol region using the source Plants of the World Online where the taxonomic backbone is the World Checklist of Vascular Plants. If you have specified multiple locations, these can be queried separately, or set up a loop, then combined into a data frame.
 
-Don't forget to include an appropriate outgroup in your species list so that the tree can be rooted. These can be appended manually to the output csv file, if an outgroup is not already included. The output file will be saved to the folder named the study group.
+Don't forget to include an appropriate outgroup in your species list so that the tree can be rooted. They should be known to be outside of the study group but closely related to it. One or more outgroup species can be appended manually to the output csv file, if an outgroup is not already included. The output file will be saved to the folder named the study group.
 
 ```{r}
 # Create or clear the csv file before appending

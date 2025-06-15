@@ -9,7 +9,7 @@ authors:
 
 # About this script
 
-This code is for running species distribution models (SDMs) using a maximum entropy approach (MaxEnt) and/or CLIMATCH to estimate the probability of presence of a species in any given area. Running these SDMs involves using underlying spatial layers and in the case of CLIMATCH, also a target area polygon for the predictions. In summary, the code:
+This code is for running species distribution models (SDMs) using a maximum entropy approach (MaxEnt) and/or CLIMATCH to estimate the probability of presence of a species in any given area. Running these SDMs involves using underlying spatial layers and, in the case of CLIMATCH, also a target area polygon for the predictions. In summary, the code:
 
 1.  Imports the occurrence data created generated using the 2_Occurrences Quarto notebook.
 2.  Downloads [CHELSA](https://chelsa-climate.org/) climate data.
@@ -48,7 +48,6 @@ library(terra)
 library(leafsync)
 library(geodata)
 library(raster)
-library(terra)
 library(leaflet)
 
 #if (!require("pak")) install.packages("pak")
@@ -66,7 +65,7 @@ knitr::opts_knit$set(root.dir = paste0("./", study_group))
 
 ## **Import occurrence data**
 
-This code chuck imports the occurrence data obtained using the `2_Occurrences` Quarto notebook and sets up parameters for use later on in the script. It also creates a unique taxon list from the occurrence data for creating folder names to place results and for running the loops on each taxon.
+This code chunk imports the occurrence data obtained using the `2_Occurrences` Quarto notebook and sets up parameters for use later on in the script. It also creates a unique taxon list from the occurrence data for creating folder names to place results and for running the loops on each taxon.
 
 ```{r}
 occ_data <-

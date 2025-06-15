@@ -47,7 +47,7 @@ species_vector <- species_list$Species
 
 ## **Retrieve DNA sequences from GenBank**
 
-We will search GenBank to check the distribution of genes for the organisms in our species list. A list of the target genes to retrieved based on a threshold (defaulted to markers available in at least 30% of taxa) is then made. The results will vary depending on the taxa queried and what sequencing data has been deposited to GenBank. The query is run on the vector of all species names.
+We will search GenBank to check the availability of DNA sequence data for the organisms in our species list. A list of the target genes to retrieved based on a threshold (defaulted to markers available in at least 30% of taxa) is then made. The results will vary depending on the taxa queried and what sequencing data has been deposited to GenBank. The query is run on the vector of all species names.
 
 Important: if your function returns with Error(s): PhraseNotFound, you need to remove the problematic species the errors flagged up from your vector. This is due to mismatch with GenBank's taxonomic backbone. To do this, use the commented out code to clean the species vector, and run the function on the cleaned vector.
 
@@ -93,7 +93,7 @@ Download the sequences as fasta files. If you change download.sqs to FALSE, you 
 sq.retrieve.indirect(acc.table.unique, download.sqs = TRUE)
 ```
 
-Next, check which species in the list had no GenBank data. These species will not appear in the phylogenetic tree, and may help inform additional sequencing efforts.
+Next, check which species in the list had no GenBank data. These species will not appear in the phylogenetic tree, and knowing what you are missing may help inform future sequencing efforts.
 
 ```{r}
 # Check if species in species_vector are in the 'Species' column of acc.table.unique
@@ -179,7 +179,7 @@ concatenated_alignment <- do.call(cbind.DNAbin, alignments_list)
 
 Now, it is time create the phylogeny. In the first line of the code chunk, indicate the tip names of your outgroup(s) so that the tree is rooted appropriately. You can also root the tree in the PhyloControl visualisation app.
 
-The function `raxml` runs a Maximum Likelihood Tree Estimation with RAxML. Here, it is parameterised to run a rapid Bootstrap analysis and search for best scoring ML tree. To speed things up, which may be necessary for large matrices with lots of species and lots of genes, this step may be moved to High Performance Computing (HPC).
+The function `raxml` runs a Maximum Likelihood Tree Estimation with RAxML. Here, it is parameterised to run a rapid Bootstrap analysis and search for the best scoring ML tree. To speed things up, which may be necessary for large matrices with lots of species and lots of genes, this step may be moved to High Performance Computing (HPC). If your computer has fewer than 8 processors, adjust the threads parameter accordingly.
 
 The resulting phylogeny is saved as a Newick file (.tre) and there will be underscores (not spaces) in the scientific names.
 
