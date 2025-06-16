@@ -32,8 +32,10 @@ visualise, and analyse data efficiently.
 This repository,
 [`phylocontrol-geninput`](https://github.com/csiro/phylocontrol-geninput),
 contains the four Quarto notebooks to generate inputs for the R Shiny
-visualisation application available from the [`phylocontrol-viz`
-repository](https://github.com/csiro/phylocontrol.viz).
+visualisation application. The application is available from the
+[`phylocontrol-viz`
+repository](https://github.com/csiro/phylocontrol.viz) and contains the
+source code for the `{phylocontrol.viz}` package.
 
 <p align="center">
 
@@ -44,7 +46,7 @@ repository](https://github.com/csiro/phylocontrol.viz).
 ## Install and run
 
 To run these Quarto notebooks, clone this repository to your local
-computer and open the .qmd files using RStudio to edit and run them.
+computer and open the `.qmd` files using RStudio to edit and run them.
 Each notebook is self-contained and can be run independently. This
 allows users to skip steps if you already have input data from other
 sources.
