@@ -24,10 +24,12 @@ damage by biocontrol agents to native and economically important plant
 species. To facilitate this, host test lists need to be developed from
 an understanding of evolutionary relationships. The process of obtaining
 a host test list is currently not standardised, and the manual steps may
-be time-consuming and challenging. PhyloControl integrates taxonomic
-data, molecular data, spatial data, and plant traits in an intuitive
-interactive interface, empowering biocontrol practitioners to summarise,
-visualise, and analyse data efficiently.
+be time-consuming and challenging, introducing risks if taxonomic
+associations with the target weeds are uncertain or if the taxonomy of
+potential non-target species is poorly resolved. PhyloControl integrates
+taxonomic data, molecular data, spatial data, and plant traits in an
+intuitive interactive interface, empowering biocontrol practitioners to
+summarise, visualise, and analyse data efficiently.
 
 This repository,
 [`phylocontrol-geninput`](https://github.com/csiro/phylocontrol-geninput),
@@ -75,7 +77,8 @@ MaxEnt, the `maxent_thresholds.csv` file.
 
 **`4_Sequences_and_phylogenomics.qmd`**
 
-A phylogenetic tree in Newick format e.g. `Erigeron.tre`
+A phylogenetic tree in Newick format e.g. `Erigeron.tre`. It should be
+outgroup rooted.
 
 It is recommended to copy the output files needed for the PhyloControl
 visualisation application into a separate directory set up specifically

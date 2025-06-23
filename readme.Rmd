@@ -25,7 +25,7 @@ A phylogeny and spatial data visualisation interface for risk analysis and decis
 
 ## Introduction
 
-PhyloControl is a user-friendly visualisation tool to aid biocontrol researchers in their decision-making during risk analysis. Thorough host-specificity testing is crucial to minimise the risk of off-target damage by biocontrol agents to native and economically important plant species. To facilitate this, host test lists need to be developed from an understanding of evolutionary relationships. The process of obtaining a host test list is currently not standardised, and the manual steps may be time-consuming and challenging. PhyloControl integrates taxonomic data, molecular data, spatial data, and plant traits in an intuitive interactive interface, empowering biocontrol practitioners to summarise, visualise, and analyse data efficiently.
+PhyloControl is a user-friendly visualisation tool to aid biocontrol researchers in their decision-making during risk analysis. Thorough host-specificity testing is crucial to minimise the risk of off-target damage by biocontrol agents to native and economically important plant species. To facilitate this, host test lists need to be developed from an understanding of evolutionary relationships. The process of obtaining a host test list is currently not standardised, and the manual steps may be time-consuming and challenging, introducing risks if taxonomic associations with the target weeds are uncertain or if the taxonomy of potential non-target species is poorly resolved. PhyloControl integrates taxonomic data, molecular data, spatial data, and plant traits in an intuitive interactive interface, empowering biocontrol practitioners to summarise, visualise, and analyse data efficiently.
 
 This repository, [`phylocontrol-geninput`](https://github.com/csiro/phylocontrol-geninput), contains the four Quarto notebooks to generate inputs for the R Shiny visualisation application. The application is available from the [`phylocontrol-viz` repository](https://github.com/csiro/phylocontrol.viz) and contains the source code for the `{phylocontrol.viz}` package.
 
@@ -55,7 +55,7 @@ A `sdm/` folder containing folders `maxent_results/` and/or `climatch_results/`.
 
 **`4_Sequences_and_phylogenomics.qmd`**
 
-A phylogenetic tree in Newick format e.g. `Erigeron.tre`
+A phylogenetic tree in Newick format e.g. `Erigeron.tre`. It should be outgroup rooted.
 
 It is recommended to copy the output files needed for the PhyloControl visualisation application into a separate directory set up specifically for the visualisation app which contains a folder for each study group e.g. `App_data/Erigeron/`.
 
