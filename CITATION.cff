@@ -1,40 +1,33 @@
 # This CITATION.cff reference content was generated from Zotero.
-references:
-  - title: >-
-      PhyloControl: A phylogeny visualisation platform for risk analysis in weed biological control
-    abstract: |
-      Phylogenetic distance is a key measure used to develop species lists for host specificity tests that delimit the fundamental and realised host range of candidate weed biocontrol agents to meet the assumptions of the centrifugal phylogenetic method. Plant pathogens and insects, even those with broad host ranges, exhibit some degree of phylogenetic conservatism in their host plant associations. Thorough host specificity testing is crucial to minimise the risk of off-target damage to native and economically important plant species. Host test lists need to be developed from an understanding of evolutionary relationships, usually visualised as a phylogenetic tree, together with plant functional traits, and geospatial information. Currently, the process of obtaining a host test list is not standardised, and the manual steps are time-consuming and challenging. We introduce a user-friendly, open-source visualisation tool called PhyloControl to aid researchers in biocontrol risk analysis. PhyloControl integrates taxonomic data, molecular data, spatial data, and plant traits in an intuitive interactive interface, empowering biocontrol practitioners to summarise, visualise and analyse data efficiently. Comprehensively sampled phylogenetic trees are often unavailable, and older published phylogenies often lack branch resolution and support, which increases uncertainty. PhyloControl includes a workflow implemented through Quarto notebooks in R that allows users to perform phylogenetic analyses on GenBank DNA sequences. The modular workflow also incorporates species distribution modelling to predict the current and potential extent of target weed species. PhyloControl will streamline the development of biocontrol host tests lists to support risk analysis and decision making in classical weed biological control.
-    type: journalArticle
-    database: ScienceDirect
-    date-accessed: 2025-08-06T00:15:30Z
-    issn: 1049-9644
-    journal: Biological Control
-    pages: 105859
-    volume: 209
-    url: https://www.sciencedirect.com/science/article/pii/S1049964425001690
-    keywords: 
-      - Biological control
-      - Phylogenetics
-      - Species distribution modelling
-      - Weeds
-    authors: 
-      - family-names: Chen
-        given-names: Stephanie H.
-      - family-names: Stevens
-        given-names: Lauren
-      - family-names: Gooden
-        given-names: Ben
-      - family-names: Rafter
-        given-names: Michelle A.
-      - family-names: Knerr
-        given-names: Nunzio
-      - family-names: Thrall
-        given-names: Peter H.
-      - family-names: Ord
-        given-names: Louise
-      - family-names: Schmidt-Lebuhn
-        given-names: Alexander N.
-    date-published: 2025-07-30
-    identifiers: 
-      - type: doi
-        value: 10.1016/j.biocontrol.2025.105859
+message: "If you use this software, please cite it as below."
+title: "PhyloControl: A phylogeny visualisation platform for risk analysis in weed biological control"
+type: journalArticle
+issn: 1049-9644
+journal: Biological Control
+pages: 105859
+volume: 209
+url: https://www.sciencedirect.com/science/article/pii/S1049964425001690
+keywords: 
+- Biological control
+- Phylogenetics
+- Species distribution modelling
+- Weeds
+authors: 
+- family-names: Chen
+  given-names: Stephanie H.
+- family-names: Stevens
+  given-names: Lauren
+- family-names: Gooden
+  given-names: Ben
+- family-names: Rafter
+  given-names: Michelle A.
+- family-names: Knerr
+  given-names: Nunzio
+- family-names: Thrall
+  given-names: Peter H.
+- family-names: Ord
+  given-names: Louise
+- family-names: Schmidt-Lebuhn
+  given-names: Alexander N.
+date-published: 2025-07-30
+doi: 10.1016/j.biocontrol.2025.105859
