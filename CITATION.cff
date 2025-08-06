@@ -34,58 +34,7 @@ references:
         given-names: Louise
       - family-names: Schmidt-Lebuhn
         given-names: Alexander N.
-    editors: 
-      - family-names: Chen
-        given-names: Stephanie H.
-      - family-names: Stevens
-        given-names: Lauren
-      - family-names: Gooden
-        given-names: Ben
-      - family-names: Rafter
-        given-names: Michelle A.
-      - family-names: Knerr
-        given-names: Nunzio
-      - family-names: Thrall
-        given-names: Peter H.
-      - family-names: Ord
-        given-names: Louise
-      - family-names: Schmidt-Lebuhn
-        given-names: Alexander N.
-    recipients: 
-      - family-names: Chen
-        given-names: Stephanie H.
-      - family-names: Stevens
-        given-names: Lauren
-      - family-names: Gooden
-        given-names: Ben
-      - family-names: Rafter
-        given-names: Michelle A.
-      - family-names: Knerr
-        given-names: Nunzio
-      - family-names: Thrall
-        given-names: Peter H.
-      - family-names: Ord
-        given-names: Louise
-      - family-names: Schmidt-Lebuhn
-        given-names: Alexander N.
-    translators: 
-      - family-names: Chen
-        given-names: Stephanie H.
-      - family-names: Stevens
-        given-names: Lauren
-      - family-names: Gooden
-        given-names: Ben
-      - family-names: Rafter
-        given-names: Michelle A.
-      - family-names: Knerr
-        given-names: Nunzio
-      - family-names: Thrall
-        given-names: Peter H.
-      - family-names: Ord
-        given-names: Louise
-      - family-names: Schmidt-Lebuhn
-        given-names: Alexander N.
-    date-published: 2025-10-01
+    date-published: 2025-07-30
     identifiers: 
       - type: doi
         value: 10.1016/j.biocontrol.2025.105859
