@@ -110,11 +110,10 @@ By contributing to this project, you agree to abide by its terms.
 
 ## Citing PhyloControl
 
-The PhyloControl paper is currently in review. For now, please cite the
-[pre-print on bioRxiv](https://doi.org/10.1101/2025.06.11.658203).
+The PhyloControl paper is published in *Biological Control*.
 
 > Stephanie H. Chen, Lauren Stevens, Ben Gooden, Michelle A. Rafter,
 > Nunzio Knerr, Peter H. Thrall, Louise Ord, Alexander N. Schmidt-Lebuhn
 > (2025). PhyloControl: a phylogeny visualisation platform for risk
-> analysis in weed biological control. bioRxiv. DOI:
-> [10.1101/2025.06.11.658203](https://doi.org/10.1101/2025.06.11.658203)
+> analysis in weed biological control. *Biological Control*. DOI:
+> [10.1016/j.biocontrol.2025.105859](https://doi.org/10.1016/j.biocontrol.2025.105859 "Persistent link using digital object identifier")
