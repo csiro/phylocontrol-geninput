@@ -1,0 +1,127 @@
+---
+title: "check and install packages"
+format: html
+editor: visual
+---
+
+## CRAN Libraries
+
+First check and install packages from CRAN
+
+```{r}
+
+#| label: Configure libraries
+
+dependentPackages <-
+  c('pbapply', 'geiger', 'foreach', 'doParallel', 'doSNOW', 'Rogue', 'zoo', 'rncl', 'solrium', 'WikipediR','dismo','rJava','rworldmap','maps','mapview','dplyr','stringr','sf','terra','leafsync','geodata','raster','leaflet','rgbif','mapview','sf','dplyr','sfheaders','maps','countrycode','sp','rworldmap','data.table','dplyr', 'BiocManager', 'devtools')
+
+for (i in dependentPackages) {
+  print(paste0("Checking for: ", i))
+  
+  # First check if you have the package installed
+  check_for_package <- system.file(package = i)
+  print(check_for_package)
+  
+  # If not run the following code to install it.
+  if (check_for_package == "") {
+    print(paste0(i, " package not found .....installing now"))
+    install.packages(i)
+  } else {
+    print(paste0(i, " package is already installed"))
+  }
+}
+
+```
+
+## Biconductor Libraries
+
+install packages from bioconductor
+
+```{r}
+
+#| label: Configure Bioconductor libraries
+
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+
+BiocManager::install(update = TRUE, ask = FALSE)
+
+biocPackages <- c("DECIPHER", "Biostrings", "msa", "odseq")
+
+for (pkg in biocPackages) {
+
+  message("Checking for: ", pkg)
+
+  if (!requireNamespace(pkg, quietly = TRUE)) {
+    
+    message(pkg, " not found ..... installing now")
+    BiocManager::install(pkg, ask = FALSE, update = FALSE)
+    
+  } else {
+    
+    message(pkg, " package is already installed")
+    
+  }
+}
+
+```
+
+## install using devtools
+
+install from devtools
+
+```{r}
+#| label: Configure non-CRAN libraries
+
+# ---- ensure required installers exist ----
+if (!requireNamespace("remotes", quietly = TRUE)) {
+  install.packages("remotes")
+}
+
+if (!requireNamespace("devtools", quietly = TRUE)) {
+  install.packages("devtools")
+}
+
+# ---- packages to install ----
+extraPackages <- list(
+  list(name = "reutils",          type = "github", repo = "gschofl/reutils"),
+  list(name = "phruta",           type = "repo",   repo = "https://ropensci.r-universe.dev"),
+  list(name = "kewr",             type = "github", repo = "barnabywalker/kewr"),
+  list(name = "climatchR",        type = "git",    repo = "https://code.usgs.gov/umesc/quant-ecology/climatchr.git"),
+  list(name = "ClimDatDownloadR", type = "github", repo = "HelgeJentsch/ClimDatDownloadR")
+)
+
+for (pkg in extraPackages) {
+
+  pkg_name <- pkg$name
+  
+  print(paste0("Checking for: ", pkg_name))
+  
+  check_for_package <- system.file(package = pkg_name)
+  print(check_for_package)
+  
+  if (check_for_package == "") {
+
+    print(paste0(pkg_name, " package not found ..... installing now"))
+
+    if (pkg$type == "repo") {
+      install.packages(pkg_name, repos = pkg$repo)
+    }
+
+    if (pkg$type == "github") {
+      remotes::install_github(pkg$repo, upgrade = "never")
+    }
+
+    if (pkg$type == "git") {
+      remotes::install_git(pkg$repo, upgrade = "never")
+    }
+
+  } else {
+
+    print(paste0(pkg_name, " package is already installed"))
+
+  }
+}
+
+```
