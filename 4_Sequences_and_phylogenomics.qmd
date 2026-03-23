@@ -33,7 +33,6 @@ library(ape)
 library(ips)
 
 study_group <- "Erigeron"
-knitr::opts_knit$set(root.dir = paste0("./", study_group))
 ```
 
 ## **Import species list**

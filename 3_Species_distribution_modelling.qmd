@@ -60,7 +60,6 @@ library(climatchR)
 library(ClimDatDownloadR)
 
 study_group <- "Erigeron"
-knitr::opts_knit$set(root.dir = paste0("./", study_group))
 ```
 
 ## **Import occurrence data**
